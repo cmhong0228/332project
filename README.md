@@ -1,4 +1,5 @@
 # 332project
+The goal of this project is to implement a **Distributed Sorting** system in Scala, designed to sort large-scale key/value records stored across multiple machines. The system is built to handle datasets that are too large to fit in the main memory or even on a single machine's disk.
 ## Documents  
 ### Weekly Progress
 Weekly progress is documented here: 
