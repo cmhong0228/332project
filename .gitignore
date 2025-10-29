@@ -1,5 +1,31 @@
 *.class
-*.log
-
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
+
+# === Scala / sbt ===
+/target/
+/project/target/
+/project/project/target/
+/lib_managed/
+/project/boot/
+/.bloop/
+/.metals/
+/.sbt-launch.lock
+
+# === IDE ===
+# IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# VS Code
+.vscode/
+
+# === OS/System ===
+.DS_Store
+Thumbs.db
+
+# === Logs ===
+*.log
+logs/
