@@ -1,0 +1,15 @@
+#!/bin/bash
+
+JAR_DIR=$(dirname "$0")
+JAR_FILE="$JAR_DIR/target/scala-2.13/distributedsorting.jar"
+COMMAND="master"
+
+# 인수의 개수 확인 (워커 수)
+if [ -z "$1" ]; then
+    echo "Usage: $0 <# of workers>"
+    exit 1
+fi
+
+# 자바 실행 명령
+# 예: java -jar distributedsorting.jar master 3
+java -jar "$JAR_FILE" "$COMMAND" "$1"
