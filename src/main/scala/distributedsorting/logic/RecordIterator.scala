@@ -15,6 +15,7 @@ import java.nio.file.Path
  * * 생성자에 filePath를 넘겨주어 사용, recordSize, bufferSize는 옵션
  * * Iterator와 사용방법 동일
  * * 사용 완료한 해당 iterator는 close()로 리소스 정리 필수
+ * * close는 무조건 RecordIterator로 생성된 원본 객체에서 호출, concat등 iterator연산으로 생성된 객체에서 호출 불가
  *
  * =======================================================
  * === 사용 예시 (Usage Example) ===
