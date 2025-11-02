@@ -49,7 +49,7 @@ class RecordIterator(filePath: Path, recordSize: Int = -1, bufferSize: Int = -1)
     
     /**
      * inputStream이 사용할 buffer size (바이트).
-     * 생성자 인자(recordSize)가 음수(-1)인 경우, 
+     * 생성자 인자(bufferSize)가 음수(-1)인 경우, 
      * 설정 파일(application.conf)에서 값을 읽어와 설정
      */
     private final val BUFFER_SIZE: Int = ???
