@@ -10,6 +10,13 @@ package object distributedsorting {
     type Record = Array[Byte]
 
     /*
+     * key를 저장할 type
+     * record에서 따로 key를 분리해서 고려하지는 않음
+     * Record와 같은 타입이지만 편의상 분리, key만을 저장하는 경우 사용
+     */
+    type Key = Array[Byte]
+
+    /*
      * RecordOrdering을 생성하는 factory method
      * @param keyLength key의 길이
      * @param recordLength record의 길이 (key+value)
