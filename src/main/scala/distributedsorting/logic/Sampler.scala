@@ -1,5 +1,7 @@
 package distributedsorting.logic
 
+import distributedsorting.distributedsorting._
+
 trait Sampler {
     // key의 길이
     val KEY_SIZE: Int
