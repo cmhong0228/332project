@@ -1,20 +1,11 @@
 package distributedsorting.logic
 
-import java.io.{BufferedOutputStream, FileOutputStream, IOException}
+import distributedsorting.distributedsorting._
+import java.io.{OutputStream, BufferedOutputStream, FileOutputStream, IOException}
 import java.nio.file.Path
 
 /**
  * Record Iterator를 파일 시스템 경로에 쓰는 클래스
- *
- * 이 클래스는 고성능 I/O를 위해 BufferedOutputStream을 사용하여
- * 디스크 쓰기 작업을 버퍼링하며, 효율적으로 바이트를 파일에 출력
- *
- * =======================================================
- * === 작동 원리 ===
- * =======================================================
- * 1. **스트리밍 처리:** writeAll()은 레코드 전체를 메모리에 모으지 않고, 
- * Iterator에서 레코드를 당겨와(Pull) 즉시 outputStream의 버퍼에 넣음
- * 2. **성능:** 버퍼가 가득 찰 때만 디스크 I/O를 수행하여 쓰기 성능을 극대화
  *
  * =======================================================
  * === 사용 및 주의 사항 ===
@@ -27,29 +18,16 @@ import java.nio.file.Path
  * =======================================================
  * === 사용 예시 (Usage Example) ===
  * =======================================================
- * * val writer = new RecordWriter(Paths.get("/home/gla/data/partition.1"))
+ * * val writer = new RecordWriter(outputStream)
  * * try {
  * *    writer.writeAll(sortedIterator) // Iterator를 넘겨 스트리밍 시작
  * * } finally {
  * *    writer.close() // 버퍼 내용 디스크 반영 및 리소스 정리
  * * }
  *
- * @param filePath 쓸 데이터 파일의 경로
- * @param bufferSize 사용할 buffer의 크기 (byte) (음수 플래그 시 conf에서 로드)
+ * @param outputStream 쓸 데이터 stream
  */
-class RecordWriter(filePath: Path, bufferSize: Int = -1) { 
-     /**
-     * outputStream이 사용할 buffer size (바이트).
-     * 생성자 인자(bufferSize)가 음수(-1)인 경우, 
-     * 설정 파일(application.conf)에서 값을 읽어와 설정
-     */
-    private final val BUFFER_SIZE: Int = ???
-    
-    /**
-     * 파일에서 바이트를 쓰는 버퍼링된 스트림
-     * 디스크 I/O 횟수를 최소화하고 성능을 높이는 데 사용
-     */
-    private val outputStream: BufferedOutputStream = ???
+class RecordWriter(outputStream: OutputStream) {     
 
     /**
      * 레코드 이터레이터를 받아, 이터레이터가 끝날 때까지 
@@ -71,11 +49,11 @@ class RecordWriter(filePath: Path, bufferSize: Int = -1) {
  * RecordWriter 클래스의 인스턴스 생명주기(생성-사용-종료)를 관리하는 유틸리티 객체
  * * 이 객체는 RecordWriter를 사용하는 호출자가 매번 try-finally 구문을 작성하고 
  * close() 호출을 잊지 않도록 강제하는 역할 수행
- * 리소스 누수(Resource Leak)를 방지하는 모범적인 패턴을 제공
+ * 리소스 누수(Resource Leak)를 방지
  */
 object RecordWriterRunner {
     /**
-     * RecordWriter를 자동으로 생성, 사용(writeAll 호출), 그리고 닫는 래퍼 함수.
+     * outputStream, RecordWriter를 자동으로 생성, 사용(writeAll 호출), 그리고 닫는 래퍼 함수.
      * * 이 함수는 RecordWriter 인스턴스를 생성하고, 주어진 Iterator를 사용하여 
      * 쓰기 작업을 실행한 후, 작업 성공 또는 실패 여부와 관계없이 
      * 반드시 close()를 호출하여 리소스를 정리
@@ -89,7 +67,7 @@ object RecordWriterRunner {
      * @param recordsIterator 파일에 쓸 레코드의 Iterator. writeAll 함수에 전달
      * @param bufferSize RecordWriter의 버퍼 크기 옵션
      */
-    def run(
+    def WriteRecordIterator(
         filePath: Path, 
         recordsIterator: Iterator[Record], 
         bufferSize: Int = -1
