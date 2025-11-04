@@ -10,6 +10,7 @@ hs_err_pid*
 /.bloop/
 /.metals/
 /.sbt-launch.lock
+.bsp/
 
 # === IDE ===
 # IntelliJ
