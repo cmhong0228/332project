@@ -192,7 +192,7 @@ trait FileRecordIteratorSuite extends RecordIteratorTestSetup {
 /**
  * StreamIteratorTests와 FileIteratorTests를 모두 실행하는 통합 테스트 클래스
  */
-class DistributedSortingTestSuite 
+class RecordIteratorSuite 
     extends FunSuite 
     with StreamIteratorTests 
     with FileIteratorTests {
