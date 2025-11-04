@@ -24,6 +24,7 @@ package object distributedsorting {
      */
      def createRecordOrdering(keyLength: Int, recordLength: Int): Ordering[Record] = {
         (recA: Record, recB: Record) => {
+            assert(keyLength <= recordLength, "Invalid keyLength and recordLength")
             assert(recA.length == recordLength, s"Invalid Record A length: ${recA.length}, expected $recordLength")
             assert(recB.length == recordLength, s"Invalid Record B length: ${recB.length}, expected $recordLength")
 
