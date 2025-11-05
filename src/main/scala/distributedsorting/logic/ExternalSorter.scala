@@ -41,6 +41,21 @@ trait ExternalSorter {
     val externalSorterOrdering: Ordering[Record]
 
     /**
+     * 결과를 저장할 각 파일의 크기
+     */
+    val chunkSize: Long
+
+    /**
+     * 결과를 저장할 파일 이름의 prefix
+     */
+    val outputPrefix: String
+
+    /**
+     * 결과를 저장할 파일 이름의 postfix의 시작값
+     */
+    val outputStartPostfix: Int
+
+    /**
      * k-way merge 단계에서 한 번에 병합할 수 있는 최대 파일 또는 스트림의 개수(k 값)
      * 이 값은 시스템의 메모리 제한을 고려하여 설정
      */
@@ -84,6 +99,23 @@ trait ExternalSorter {
      * 이 메소드는 작업의 성공/실패 여부와 관계없이 실행
      */
     def cleanUpTempFiles(): Unit = ???
+
+    /**
+     * 주어진 파일을 여러개의 파일로 나누어 저장
+     * 파일 이름은 prefix.num 형식
+     * @param inputFilePath split할 파일의 경로
+     * @param outputDirectory 파일을 저장할 위치
+     * @param recordsPerFile 파일 당 포함할 레코드 수 
+     * @param filePrefix 파일 이름 prefix
+     * @param startPostfixNumber 파일 이름 postfix
+     */
+    def splitFile(
+        inputFilePath: Path,
+        outputDirectory: Path,
+        recordsPerFile: Long,
+        filePrefix: String,
+        startPostfixNumber: Int
+    ): Unit = ???
 
     /**
      * 외부 정렬의 전체 과정을 실행하는 메인 메소드
