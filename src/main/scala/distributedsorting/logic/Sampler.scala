@@ -89,7 +89,7 @@ trait PivotSelector {
      * @param samples 모든 Worker로부터 수집된 Key 리스트
      * @return 정렬된 Key 리스트
      */
-    def SortSamples(samples: Seq[Key]): Seq[Key] = ???
+    def sortSamples(samples: Seq[Key]): Seq[Key] = ???
 
     /**
      * 정렬된 샘플 리스트에서 Worker 수에 맞춰 파티션 경계(Pivot) Key를 선택합니다.
