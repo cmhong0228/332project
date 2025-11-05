@@ -71,7 +71,7 @@ trait ExternalSorter {
      * @param fileSeq 내용을 병합하고 정렬할 파일들의 `Path` 시퀀스
      * @return 병합된 결과를 순차적으로 제공하는 `RecordIterator`
      */
-    def merge(fileSeq: Seq[Path]): Iterator[Record] = ???
+    def merge(fileSeq: Seq[Path]): Path = ???
 
     /**
      * 입력 디렉토리에서 정렬 대상이 되는 모든 일반 파일의 Path 시퀀스를 가져옴
