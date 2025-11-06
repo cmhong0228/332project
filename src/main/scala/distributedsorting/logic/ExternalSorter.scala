@@ -120,7 +120,6 @@ trait ExternalSorter {
     /**
      * 외부 정렬의 전체 과정을 실행하는 메인 메소드
      * 파일 목록 읽기, 정렬 수행, 임시 파일 정리까지 모두 담당
-     * @return 최종 정렬 결과 파일의 Path
      */
-    def executeExternalSort(): Path = ???
+    def executeExternalSort(): Unit = ???
 }
