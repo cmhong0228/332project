@@ -2,7 +2,8 @@ package distributedsorting.logic
 
 import distributedsorting.distributedsorting._
 import java.io.{InputStream, BufferedInputStream, EOFException, FileInputStream, IOException}
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
+import com.typesafe.config.ConfigFactory
 
 /**
  * stream의 내용을 Recore Iterator로 반환하는 클래스
@@ -176,26 +177,33 @@ class FileRecordIterator(
     recordSize: Int = -1, 
     bufferSize: Int = -1
 ) extends Iterator[Record] with AutoCloseable {
+    private final val config = ConfigFactory.load()
+    private final val configPath = "distributedsorting"
 
     /**
      * 레코드의 고정 길이 (바이트).
      * 생성자 인자(recordSize)가 음수(-1)인 경우, 
      * 설정 파일(application.conf)에서 값을 읽어와 설정
      */
-    private[logic] val RECORD_SIZE: Int = ???
+    private[logic] val RECORD_SIZE: Int = {
+        if (recordSize > 0) recordSize
+        else config.getBytes(s"$configPath.record-info.record-length").toInt
+    }
     
     /**
      * inputStream이 사용할 buffer size (바이트).
      * 생성자 인자(bufferSize)가 음수(-1)인 경우, 
      * 설정 파일(application.conf)에서 값을 읽어와 설정
      */
-    private[logic] val BUFFER_SIZE: Int = ???
+    private[logic] val BUFFER_SIZE: Int = {
+        if (bufferSize > 0) bufferSize
+        else config.getBytes(s"$configPath.io.buffer-size").toInt
+    }
 
-    private val inputStream: BufferedInputStream = ???
+    private val inputStream: BufferedInputStream = new BufferedInputStream(Files.newInputStream(filePath), BUFFER_SIZE)
     
     // 핵심 로직을 StreamRecordIterator에 위임 (Delegation)
-    private val delegate: StreamRecordIterator = 
-        new StreamRecordIterator(inputStream, RECORD_SIZE)
+    private val delegate: StreamRecordIterator = new StreamRecordIterator(inputStream, RECORD_SIZE)
 
     // Iterator 메소드 위임
     override def hasNext: Boolean = delegate.hasNext
