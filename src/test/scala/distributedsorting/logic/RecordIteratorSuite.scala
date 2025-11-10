@@ -1,10 +1,11 @@
 package distributedsorting.logic
 
-import distributedsorting.Record
+import distributedsorting.distributedsorting.Record
+import munit.FunSuite
 import java.io._
 import java.nio.file.{Files, Path, Paths}
 
-trait RecordIteratorTestSetup extends munit.FunSuite {
+trait RecordIteratorTestSetup {
     val RECORD_SIZE = 8 // 레코드 크기
     val NUM_RECORDS = 10  // 테스트에 사용할 레코드 수
     val TOTAL_BYTES = RECORD_SIZE * NUM_RECORDS // 총 바이트 수
@@ -28,8 +29,7 @@ trait RecordIteratorTestSetup extends munit.FunSuite {
     }
 }
 
-trait StreamRecordIteratorSuite extends RecordIteratorTestSetup {
-
+trait StreamIteratorTests extends RecordIteratorTestSetup { this: FunSuite =>
     test("Stream: Basic iteration and consumption") {
         val is = new ByteArrayInputStream(testData)
         val iterator = new StreamRecordIterator(is, RECORD_SIZE)
@@ -64,7 +64,7 @@ trait StreamRecordIteratorSuite extends RecordIteratorTestSetup {
         }
     }
 
-    test("Stream: Incomplete record should throw EOFException") {
+    test("Stream: Incomplete record should throw Exception") {
         // 데이터 끝에 1바이트 부족한 불완전한 레코드를 추가
         val incompleteData = testData.take(TOTAL_BYTES - 1) 
         val is = new ByteArrayInputStream(incompleteData)
@@ -74,7 +74,7 @@ trait StreamRecordIteratorSuite extends RecordIteratorTestSetup {
         (1 until NUM_RECORDS).foreach(_ => iterator.next())
 
         // 마지막 next() 호출 시 불완전 레코드를 읽고 예외 발생
-        intercept[EOFException] { // loadNext가 EOFException을 던진다고 가정
+        intercept[NoSuchElementException] {
             iterator.next()
         }
         
@@ -111,7 +111,12 @@ trait StreamRecordIteratorSuite extends RecordIteratorTestSetup {
     }
 }
 
-trait FileRecordIteratorSuite extends RecordIteratorTestSetup {
+trait FileIteratorTests extends RecordIteratorTestSetup { this: FunSuite =>
+    private[logic] trait FileRecordIteratorWithAccessors { 
+        this: FileRecordIterator => 
+        private[logic] def getTestRecordSize: Int = this.RECORD_SIZE
+        private[logic] def getTestBufferSize: Int = this.BUFFER_SIZE
+    }
 
     test("File: Iterator should read from a temporary file") {
         withTempFile { filePath =>
@@ -150,10 +155,6 @@ trait FileRecordIteratorSuite extends RecordIteratorTestSetup {
     }
     
     test("Conf: Negative flag should load positive values from classpath config") {
-        trait FileRecordIteratorWithAccessors {
-            val RECORD_SIZE: Int
-            val BUFFER_SIZE: Int
-        }
         val EXPECTED_RECORD_SIZE = 100
         val EXPECTED_BUFFER_SIZE = 8192
 
@@ -175,12 +176,12 @@ trait FileRecordIteratorSuite extends RecordIteratorTestSetup {
             ) with FileRecordIteratorWithAccessors // 테스트를 위해 믹스인
             
             // 1. Record Size 검증 및 출력
-            val loadedRecordSize = iterator.RECORD_SIZE
+            val loadedRecordSize = iterator.getTestRecordSize
             assert(loadedRecordSize > 0, "Record Size must be a positive value.")
             logAndVerify("Record Size", loadedRecordSize, EXPECTED_RECORD_SIZE)
             
             // 2. Buffer Size 검증 및 출력
-            val loadedBufferSize = iterator.BUFFER_SIZE
+            val loadedBufferSize = iterator.getTestBufferSize
             assert(loadedBufferSize > 0, "Buffer Size must be a positive value.")
             logAndVerify("Buffer Size", loadedBufferSize, EXPECTED_BUFFER_SIZE)
 
