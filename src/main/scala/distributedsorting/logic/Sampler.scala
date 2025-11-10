@@ -5,6 +5,7 @@ import java.nio.file.{Files, Path}
 import scala.util.Random
 import scala.jdk.CollectionConverters._
 import java.io.IOException
+import distributedsorting.logic.FileRecordIterator
 
 /**
  * Sampler 트레이트는 주어진 확률에 따라 레코드 스트림에서 Key를 추출하는 순수 샘플링 알고리즘의 책임을 정의
@@ -92,7 +93,38 @@ trait RecordExtractor { self: Sampler =>
      * @param samplingRatio Master에게 받은 최종 샘플링 확률
      * @return 추출된 Key 객체의 리스트 (Seq[Key])
      */
-    def readAndExtractSamples(inputDirs: Seq[Path], samplingRatio: Double): Seq[Key] = ???
+    def readAndExtractSamples(inputDirs: Seq[Path], samplingRatio: Double): Seq[Key] = {
+        val allFilePaths: Seq[Path] = inputDirs.flatMap { dirPath =>
+            try {
+                if (Files.isDirectory(dirPath)) {
+                    val stream = Files.walk(dirPath, 1) // 1단계 깊이만 탐색
+                    try {
+                        stream.iterator().asScala
+                            .filter(path => path != dirPath && Files.isRegularFile(path))
+                            .toSeq // 스트림을 닫기 위해 즉시 Seq로 변환
+                    } finally {
+                        stream.close()
+                    }
+                } else {
+                    Seq.empty[Path] // 디렉터리가 아니면 무시
+                }
+            } catch {
+                case e: IOException =>
+                    Seq.empty[Path] // 접근 불가 시 무시
+            }
+        }
+
+        val allSamples: Seq[Key] = allFilePaths.flatMap { filePath =>
+            val iterator = new FileRecordIterator(filePath)
+            try {
+                self.sampleKeys(iterator, samplingRatio)
+            } finally {
+                iterator.close()
+            }
+        }
+
+        allSamples
+    }
 }
     
 trait SamplingPolicy {
