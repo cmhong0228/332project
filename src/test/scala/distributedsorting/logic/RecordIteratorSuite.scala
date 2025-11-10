@@ -162,11 +162,13 @@ trait FileIteratorTests extends RecordIteratorTestSetup { this: FunSuite =>
             val success = actual == expected
             val status = if (success) "SUCCESS" else "FAILURE"
 
-            // 일치 여부와 값을 상세하게 출력
-            println("Conf: Negative flag should load positive values from classpath config")
-            println(s"  [$status] $name:")
-            println(s"      Expected: $expected")
-            println(s"      Actual:   $actual")
+            val outputString = 
+            s"""
+Conf: Negative flag should load positive values from classpath config
+  [$status] $name:
+    Expected: $expected
+    Actual:   $actual"""
+            println(outputString)
         }
         
         withTempFile { filePath =>
