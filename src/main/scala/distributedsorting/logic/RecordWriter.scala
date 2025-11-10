@@ -3,6 +3,7 @@ package distributedsorting.logic
 import distributedsorting.distributedsorting._
 import java.io.{OutputStream, BufferedOutputStream, FileOutputStream, IOException}
 import java.nio.file.Path
+import com.typesafe.config.ConfigFactory
 
 /**
  * Record Iterator를 파일 시스템 경로에 쓰는 클래스
@@ -36,13 +37,39 @@ class RecordWriter(outputStream: OutputStream) {
      * 입력 Iterator의 리소스는 호출자가 별도로 해제해야 함
      * * @param recordsIterator 쓸 레코드의 Iterator
      */
-    def writeAll(recordsIterator: Iterator[Record]): Unit = ???
+    def writeAll(recordsIterator: Iterator[Record]): Unit = {
+        if (isClosed) {
+            throw new IOException("Cannot writeAll to a closed RecordWriter")
+        }
+
+        try {
+            recordsIterator.foreach(outputStream.write)
+        } catch {
+            case e: IOException => 
+                try {
+                    close()
+                } catch {
+                    case ce: IOException => e.addSuppressed(ce)
+                }
+                throw new RuntimeException("Failed during record writing", e)
+        }
+    }
     
+    private var isClosed = false
     /**
      * 사용 완료 후 파일 핸들 및 내부 I/O 리소스를 닫아 해제
      * 리소스 누수를 방지하기 위해 반드시 호출되어야 함
      */
-    def close(): Unit = ???
+    def close(): Unit = {
+        if (!isClosed) {
+            try {
+                outputStream.flush()
+                outputStream.close()
+            } finally {
+                isClosed = true
+            }
+        }
+    }
 }
 
 /**
