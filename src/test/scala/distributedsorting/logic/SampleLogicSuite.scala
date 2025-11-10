@@ -4,12 +4,12 @@ import distributedsorting.distributedsorting._
 import munit.FunSuite
 import java.nio.file.{Path, Files}
 
-trait SmaplerTests extend FunSuite with Sampler{
+class SmaplerSuite extends FunSuite with Sampler{
     val KEY_SIZE = 10
 
     test("Sampler: sampleKeys should yield expected mean sample size within 10% margin of error") {        
         val totalRecords = 10000 // 총 레코드 수 (모집단)
-        val targetRatio = 0.01  // 목표 샘플링 비율
+        val targetRatio = 0.01   // 목표 샘플링 비율
         val numRuns = 200        // 테스트 반복 횟수 (평균 정확도를 높임)
         
         val expectedSampleSize = totalRecords * targetRatio // 기대값
@@ -54,7 +54,7 @@ trait SmaplerTests extend FunSuite with Sampler{
 
         val inputRecords: Iterator[Record] = originalRecords.iterator
         
-        val samples = sampler.sampleKeys(inputRecords, targetRatio)
+        val samples = sampleKeys(inputRecords, targetRatio)
         
         samples.foreach { sampleKey =>
             val sampleKeySeq = sampleKey.toSeq 
@@ -64,7 +64,7 @@ trait SmaplerTests extend FunSuite with Sampler{
     }
 }
 
-trait RecordCountCalculatorTests extends munit.FunSuite with RecordCountCalculator{
+class RecordCountCalculatorSuite extends FunSuite with RecordCountCalculator{
     val RECORD_SIZE = 100
 
     // 임시 디렉토리에 특정 크기의 더미 파일을 생성하는 함수
@@ -78,17 +78,25 @@ trait RecordCountCalculatorTests extends munit.FunSuite with RecordCountCalculat
     test("RecordCountCalculator: calculateTotalRecords should sum file sizes and divide by RECORD_SIZE") {
         
         // munit의 임시 디렉토리 기능을 사용합니다.
-        val tempDir1 = tempDirectory()
-        val tempDir2 = tempDirectory()
+        val tempDir1 = Files.createTempDirectory("calc-test-1-")
+        val tempDir2 = Files.createTempDirectory("calc-test-2-")
         
-        createDummyFile(tempDir1, "data_a", 10000) 
-        createDummyFile(tempDir1, "data_b", 20000) 
-        createDummyFile(tempDir2, "data_c", 5000)
+        try {
+            createDummyFile(tempDir1, "data_a", 10000) 
+            createDummyFile(tempDir1, "data_b", 20000) 
+            createDummyFile(tempDir2, "data_c", 5000)
 
-        val inputDirs = Seq(tempDir1, tempDir2)
-        val totalRecords = calculateTotalRecords(inputDirs)
+            val inputDirs = Seq(tempDir1, tempDir2)
+            val totalRecords = calculateTotalRecords(inputDirs)
 
-        assertEquals(totalRecords, 350L)
+            assertEquals(totalRecords, 350L)
+        } finally {
+            Files.deleteIfExists(tempDir1.resolve("data_a"))
+            Files.deleteIfExists(tempDir1.resolve("data_b"))
+            Files.deleteIfExists(tempDir2.resolve("data_c"))
+            Files.deleteIfExists(tempDir1)
+            Files.deleteIfExists(tempDir2)
+        }
     }
 
     test("RecordCountCalculator: calculateTotalRecords should return 0 for empty input directories") {        
@@ -98,22 +106,27 @@ trait RecordCountCalculatorTests extends munit.FunSuite with RecordCountCalculat
     }
 
     test("RecordCountCalculator: calculateTotalRecords should handle directories with no files") {        
-        val tempDir = tempDirectory() // 파일이 없는 빈 디렉토리
+        val tempDir = Files.createTempDirectory("empty_dir") // 파일이 없는 빈 디렉토리
 
-        val totalRecords = calculateTotalRecords(Seq(tempDir))
+        try {
+            val totalRecords = calculateTotalRecords(Seq(tempDir))
 
-        assertEquals(totalRecords, 0L)
+            assertEquals(totalRecords, 0L)
+        } finally {
+            Files.deleteIfExists(tempDir)
+        }
+        
     }
 }
 
-trait RecordExtractorTests extends munit.FunSuite with RecordExtractor { 
+class RecordExtractorSuite extends FunSuite with RecordExtractor with Sampler{
     val KEY_SIZE = 10
         
     // 임시 디렉토리에 더미 파일 생성 (RECORD_SIZE의 배수 크기)
     def createDummyFile(dir: Path, name: String, numRecords: Int): Seq[Array[Byte]] = {
         val totalBytes = numRecords * KEY_SIZE
         val dummyRecords = (0 until numRecords).map { i => 
-            Array.fill[Byte](RECORD_SIZE)(i.toByte)
+            Array.fill[Byte](KEY_SIZE)(i.toByte)
         }
         
         val filePath = dir.resolve(name)
@@ -127,25 +140,34 @@ trait RecordExtractorTests extends munit.FunSuite with RecordExtractor {
         val targetRatio = 1.0 // 모든 레코드를 추출해야 함
         
         // munit의 임시 디렉토리를 사용
-        val tempDir1 = tempDirectory()
-        val tempDir2 = tempDirectory()
+        val tempDir1 = Files.createTempDirectory("extr-test-1-")
+        val tempDir2 = Files.createTempDirectory("extr-test-2-")
         
-        val records1 = createDummyFile(tempDir1, "data_a", 100) 
-        val records2 = createDummyFile(tempDir1, "data_b", 150) 
-        val records3 = createDummyFile(tempDir2, "data_c", 250) 
-        
-        val inputDirs = Seq(tempDir1, tempDir2)
-        val expectedTotalRecords = 100 + 150 + 250
-        
-        val extractedKeys = extractor.readAndExtractSamples(inputDirs, targetRatio)
+        try {
+            val records1 = createDummyFile(tempDir1, "data_a", 100) 
+            val records2 = createDummyFile(tempDir1, "data_b", 150) 
+            val records3 = createDummyFile(tempDir2, "data_c", 250) 
+            
+            val inputDirs = Seq(tempDir1, tempDir2)
+            val expectedTotalRecords = 100 + 150 + 250
+            
+            val extractedKeys = readAndExtractSamples(inputDirs, targetRatio)
 
-        assertEquals(extractedKeys.size.toLong, expectedTotalRecords.toLong)
+            assertEquals(extractedKeys.size.toLong, expectedTotalRecords.toLong)
+            
+            assert(extractedKeys.forall(_.length == KEY_SIZE))
+        } finally {
+            Files.deleteIfExists(tempDir1.resolve("data_a"))
+            Files.deleteIfExists(tempDir1.resolve("data_b"))
+            Files.deleteIfExists(tempDir2.resolve("data_c"))
+            Files.deleteIfExists(tempDir1)
+            Files.deleteIfExists(tempDir2)
+        }
         
-        assert(extractedKeys.forall(_.length == KEY_SIZE))
     }
 }
 
-trait PivotSelectorTests extends munit.FunSuite with PivotSelector {
+class PivotSelectorSuite extends FunSuite with PivotSelector {
     val KEY_SIZE = 8
     val numWorkers = 10
 
@@ -194,8 +216,8 @@ trait PivotSelectorTests extends munit.FunSuite with PivotSelector {
             pair=>
             val curr = pair.head
             val next = pair.last
-            val diff = next-current
-            assert(diff == numRecordsPerPartition || diff = numRecordsPerPartition + 1)
+            val diff = next-curr
+            assert(diff == numRecordsPerPartition || diff == numRecordsPerPartition + 1)
         }        
     }
     
@@ -206,8 +228,4 @@ trait PivotSelectorTests extends munit.FunSuite with PivotSelector {
         
         assert(pivots.isEmpty)
     }
-}
-
-class SampleLogicSuite extends FunSuite with SmaplerTests with RecordCountCalculatorTests with RecordExtractorTests with PivotSelectorTests {
-    
 }
