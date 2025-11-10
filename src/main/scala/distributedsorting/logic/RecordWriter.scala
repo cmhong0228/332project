@@ -2,7 +2,7 @@ package distributedsorting.logic
 
 import distributedsorting.distributedsorting._
 import java.io.{OutputStream, BufferedOutputStream, FileOutputStream, IOException}
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
 import com.typesafe.config.ConfigFactory
 
 /**
@@ -79,6 +79,8 @@ class RecordWriter(outputStream: OutputStream) {
  * 리소스 누수(Resource Leak)를 방지
  */
 object RecordWriterRunner {
+    private final val config = ConfigFactory.load()
+    private final val configPath = "distributedsorting"
     /**
      * outputStream, RecordWriter를 자동으로 생성, 사용(writeAll 호출), 그리고 닫는 래퍼 함수.
      * * 이 함수는 RecordWriter 인스턴스를 생성하고, 주어진 Iterator를 사용하여 
@@ -98,5 +100,30 @@ object RecordWriterRunner {
         filePath: Path, 
         recordsIterator: Iterator[Record], 
         bufferSize: Int = -1
-    ): Unit = ???
+    ): Unit = {
+        val BUFFER_SIZE = {
+            if (bufferSize > 0) bufferSize
+            else config.getBytes(s"$configPath.io.buffer-size").toInt
+        }
+
+        var writer: RecordWriter = null
+
+        try {
+            val fileStream: OutputStream = Files.newOutputStream(filePath)
+            
+            val bufferStream: BufferedOutputStream = new BufferedOutputStream(fileStream, BUFFER_SIZE)
+            
+            writer = new RecordWriter(bufferStream)
+            
+            writer.writeAll(recordsIterator)
+
+        } catch {
+            case e: Exception =>
+                throw new RuntimeException(s"Failed to write records to $filePath", e)
+        } finally {
+            if (writer != null) {
+                writer.close()
+            }
+        }
+    }
 }
