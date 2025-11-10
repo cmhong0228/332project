@@ -37,6 +37,8 @@ class StreamRecordIterator(
     inputStream: InputStream, 
     recordSize: Int
 ) extends Iterator[Record] with AutoCloseable {
+    require(recordSize > 0, "recordSize must be a positive integer.")
+
     /**
      * 룩어헤드 임시 저장소
      * 다음에 next() 호출 시 반환할 레코드를 미리 로드하여 이터레이터의 상태를 유지
@@ -49,7 +51,44 @@ class StreamRecordIterator(
      * 파일 끝(-1)이나 불완전한 레코드 감지 시 None을 반환하며, 
      * I/O 예외 발생 시 스트림을 닫고 RuntimeException을 던짐
      */
-    private def loadNext(): Option[Record] = ???
+    private def loadNext(): Option[Record] = {
+        if (isClosed) {
+            return None
+        }
+
+        try {
+            val buffer = new Array[Byte](recordSize)
+            var totalBytesRead = 0
+            var bytesRead = 0
+
+            while (totalBytesRead < recordSize && bytesRead != -1) {
+                // buffer의 'totalBytesRead' 위치부터, 'recordSize - totalBytesRead' 만큼 읽기를 시도
+                bytesRead = inputStream.read(buffer, totalBytesRead, recordSize - totalBytesRead)
+                
+                if (bytesRead != -1) {
+                    totalBytesRead += bytesRead
+                }
+            }
+
+            if (totalBytesRead == recordSize) {
+                Some(buffer)
+            } else if (totalBytesRead == 0 && bytesRead == -1) {
+                None
+            } else {
+                // 불완전한 레코드
+                None
+            }
+            
+        } catch {
+            case e: IOException =>
+                try {
+                    close()
+                } catch {
+                    case ce: IOException => e.addSuppressed(ce)
+                }
+                throw new RuntimeException("Failed to read next record from stream", e)
+        }
+    }
 
     /**
      * 스트림에 다음에 소비할 레코드가 있는지 확인
@@ -57,7 +96,7 @@ class StreamRecordIterator(
      *
      * @return 다음 레코드가 존재하면 true
      */
-    override def hasNext: Boolean = ???
+    override def hasNext: Boolean = nextRecord.isDefined
 
     /**
      * 다음 Record 를 반환하고,
@@ -66,13 +105,30 @@ class StreamRecordIterator(
      * @return 다음 레코드
      * @throws NoSuchElementException 더 이상 읽을 레코드가 없을 때 호출되면 발생
      */
-    override def next(): Record = ???
+    override def next(): Record = {
+        if (!hasNext) {
+            throw new NoSuchElementException("next() called on empty iterator")
+        }
+        val currentRecord = nextRecord.get
+        nextRecord = loadNext()
+        currentRecord
+    }
 
+    var isClosed: Boolean = false
     /**
      * 사용 완료 후 파일 핸들 및 내부 I/O 리소스를 닫아 해제
      * 리소스 누수를 방지하기 위해 반드시 호출되어야 함
      */
-    override def close(): Unit = ???
+    override def close(): Unit = {
+        if (!isClosed) {
+            try {
+                inputStream.close()
+            } finally {
+                isClosed = true
+                nextRecord = None 
+            }
+        }
+    }
 
     nextRecord = loadNext()
 }
@@ -126,14 +182,14 @@ class FileRecordIterator(
      * 생성자 인자(recordSize)가 음수(-1)인 경우, 
      * 설정 파일(application.conf)에서 값을 읽어와 설정
      */
-    private final val RECORD_SIZE: Int = ???
+    private[logic] val RECORD_SIZE: Int = ???
     
     /**
      * inputStream이 사용할 buffer size (바이트).
      * 생성자 인자(bufferSize)가 음수(-1)인 경우, 
      * 설정 파일(application.conf)에서 값을 읽어와 설정
      */
-    private final val BUFFER_SIZE: Int = ???
+    private[logic] val BUFFER_SIZE: Int = ???
 
     private val inputStream: BufferedInputStream = ???
     
