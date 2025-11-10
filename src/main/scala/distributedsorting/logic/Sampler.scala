@@ -1,8 +1,10 @@
 package distributedsorting.logic
 
 import distributedsorting.distributedsorting._
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
 import scala.util.Random
+import scala.jdk.CollectionConverters._
+import java.io.IOException
 
 /**
  * Sampler 트레이트는 주어진 확률에 따라 레코드 스트림에서 Key를 추출하는 순수 샘플링 알고리즘의 책임을 정의
@@ -44,7 +46,35 @@ trait RecordCountCalculator {
      * @param inputDirs Worker가 처리할 데이터가 있는 디스크 경로 목록
      * @return 총 레코드 개수 (Long 타입)
      */
-    def calculateTotalRecords(inputDirs: Seq[Path]): Long = ???
+    def calculateTotalRecords(inputDirs: Seq[Path]): Long = {
+        if (inputDirs.isEmpty || RECORD_SIZE <= 0) {
+            return 0L
+        }
+        val totalSize = inputDirs.map { dirPath =>
+            try {
+                if (Files.isDirectory(dirPath)) {
+                    val stream = Files.walk(dirPath, 1) 
+                    try {
+                        stream
+                            .iterator().asScala // Java Stream을 Scala Iterator로 변환
+                            .filter(path => path != dirPath) // 디렉터리 자신은 제외
+                            .filter(Files.isRegularFile(_)) // 파일만 필터링
+                            .map(Files.size(_)) // 각 파일의 크기(Long)를 가져옴
+                            .sum // 이 디렉터리의 모든 파일 크기를 합산
+                    } finally {
+                        stream.close()
+                    }
+                } else {
+                    0L // 경로가 디렉터리가 아니면 0으로 처리
+                }
+            } catch {
+                case e: IOException =>
+                    0L
+            }
+        }.sum // 모든 디렉터리의 총 파일 크기를 합산
+
+        totalSize / RECORD_SIZE
+    }
 }
 
 /**
