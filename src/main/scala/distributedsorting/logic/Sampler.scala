@@ -2,6 +2,7 @@ package distributedsorting.logic
 
 import distributedsorting.distributedsorting._
 import java.nio.file.Path
+import scala.util.Random
 
 /**
  * Sampler 트레이트는 주어진 확률에 따라 레코드 스트림에서 Key를 추출하는 순수 샘플링 알고리즘의 책임을 정의
@@ -16,7 +17,17 @@ trait Sampler {
      * @param samplingRatio 마스터로부터 받은 샘플링 확률 (k/n)
      * @return 샘플링된 Key 리스트 (Seq[Key])
      */
-    def sampleKeys(inputIterator: Iterator[Record], samplingRatio: Double): Seq[Key] = ???
+    def sampleKeys(inputIterator: Iterator[Key], samplingRatio: Double): Seq[Key] = {
+        val rand = new Random()
+
+        val sampledKeysIterator = inputIterator.collect {
+            case key if rand.nextDouble() < samplingRatio =>
+                assert(key.length == KEY_SIZE)
+                key
+        }
+
+        sampledKeysIterator.toSeq
+    }
 }
 
 /**
