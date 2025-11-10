@@ -1,6 +1,6 @@
 package distributedsorting.logic
 
-import distributedsorting.Record
+import distributedsorting.distributedsorting.Record
 import munit.FunSuite
 import java.io.{ByteArrayOutputStream, OutputStream}
 import java.nio.file.{Files, Path}
@@ -74,7 +74,7 @@ class RecordWriterSuite extends FunSuite {
 
         RecordWriterRunner.WriteRecordIterator(tempFile, recordsIterator)
 
-        assertEquals(Files.size(tempFile), numRecords * RECORD_SIZE, "The output file size should match the size of records")
+        assertEquals(Files.size(tempFile), (numRecords * RECORD_SIZE).toLong, "The output file size should match the size of records")
 
         Files.deleteIfExists(tempFile)
     }
@@ -100,7 +100,7 @@ class RecordWriterSuite extends FunSuite {
         }
 
         // 예외 발생 전까지 첫 번째 레코드만 쓰였고, 리소스가 정상적으로 해제되었는지 확인
-        assertEquals(Files.size(tempFile), 1*RECORD_SIZE, "Records should be written until the failure") 
+        assertEquals(Files.size(tempFile), (1*RECORD_SIZE).toLong, "Records should be written until the failure") 
         
         Files.deleteIfExists(tempFile)
     }
