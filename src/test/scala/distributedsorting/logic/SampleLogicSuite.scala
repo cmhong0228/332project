@@ -228,6 +228,7 @@ class SamplingPolicySuite extends FunSuite {
 
 class PivotSelectorSuite extends FunSuite with PivotSelector {
     val KEY_SIZE = 8
+    val RECORD_SIZE = 50
     val numWorkers = 10
 
     // 테스트 편의를 위해 Long 값을 Byte 배열 Key로 변환
@@ -286,5 +287,22 @@ class PivotSelectorSuite extends FunSuite with PivotSelector {
         val pivots = selectPivots(sortedKeys)
         
         assert(pivots.isEmpty)
+    }
+
+    test("PivotSelector: createPaddedPivots should make right padding") {
+        val testKey: Key = Array[Byte](1, 2, 3, 4, 5, 6, 7, 8)
+        val pivotKeys = Vector(testKey)
+
+        val paddedPivots = createPaddedPivots(pivotKeys)
+
+        assertEquals(paddedPivots.size, 1)
+        val paddedRecord = paddedPivots.head
+
+        assertEquals(paddedRecord.length, RECORD_SIZE)
+
+        assertEquals(paddedRecord.take(KEY_SIZE).toSeq, testKey.toSeq)
+
+        val padding = paddedRecord.drop(10)
+        assert(padding.forall(_ == 0.toByte))
     }
 }
