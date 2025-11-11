@@ -16,6 +16,8 @@ class MasterServiceImpl(val numWorkers: Int) extends MasterServiceGrpc.MasterSer
      
     // key의 길이
     val KEY_SIZE: Int = ???
+    // record의 길이
+    val RECORD_SIZE: Int = ???
     // memory의 크기
     val MEMORY_SIZE: Long = ???
     // 최대 사용할 메모리의 비율
