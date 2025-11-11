@@ -156,6 +156,8 @@ trait SamplingPolicy {
  * PivotSelector 트레이트는 샘플 데이터를 분석하여 파티션 경계를 결정하는 알고리즘 책임을 정의
  */
 trait PivotSelector {
+    val KEY_SIZE: Int
+    val RECORD_SIZE: Int
     // worker의 개수
     val numWorkers: Int
 
@@ -191,5 +193,15 @@ trait PivotSelector {
         }
 
         pivots.toVector
+    }
+
+    def createPaddedPivots(pivots: Vector[Key]): Vector[Record] = {
+        val paddingSize = RECORD_SIZE - KEY_SIZE
+
+        val padding = Array.fill[Byte](paddingSize)(0)
+
+        pivots.map { key =>
+            key ++ padding
+        }.toVector
     }
 }
