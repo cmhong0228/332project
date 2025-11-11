@@ -149,7 +149,7 @@ class RecordExtractorSuite extends FunSuite with RecordExtractor with Sampler{
             val records3 = createDummyFile(tempDir2, "data_c", 250) 
             
             val inputDirs = Seq(tempDir1, tempDir2)
-            val expectedTotalRecords = 100 + 150 + 250
+            val expectedTotalRecords = (100 + 150 + 250) / KEY_SIZE
             
             val extractedKeys = readAndExtractSamples(inputDirs, targetRatio)
 
