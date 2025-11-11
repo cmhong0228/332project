@@ -167,7 +167,9 @@ trait PivotSelector {
      * @param samples 모든 Worker로부터 수집된 Key 리스트
      * @return 정렬된 Key 리스트
      */
-    def sortSamples(samples: Seq[Key]): Seq[Key] = ???
+    def sortSamples(samples: Seq[Key]): Seq[Key] = {
+        samples.sorted(ordering)
+    }
 
     /**
      * 정렬된 샘플 리스트에서 Worker 수에 맞춰 파티션 경계(Pivot) Key를 선택합니다.
@@ -175,5 +177,19 @@ trait PivotSelector {
      * @param numWorkers 나눌 파티션(Worker)의 개수
      * @return 최종 파티셔닝 경계 Key 벡터
      */
-    def selectPivots(sortedSamples: Seq[Key]): Vector[Key] = ???
+    def selectPivots(sortedSamples: Seq[Key]): Vector[Key] = {
+        val numSamples = sortedSamples.size
+        if (numSamples < numWorkers) {
+            return Vector.empty[Key]
+        }
+
+        val step = numSamples / numWorkers
+        val remainder = numSamples % numWorkers
+        val pivots = (1 until numWorkers).map { i =>
+            val pivotIndex = i * step + min(i, remainder)
+            sortedSamples(pivotIndex)
+        }
+
+        pivots.toVector
+    }
 }
