@@ -3,8 +3,8 @@ The goal of this project is to implement a **Distributed Sorting** system in Sca
 ## Documents  
 ### Progress
 Weekly Progress: 
-[weekly progress](https://thundering-penguin-686.notion.site/2025-CSED332-Team-Grey-Weekly-Progress-28e7bcd1304e80dab9c1d561fcb0d2d8)  
-Milestones: [milestones](https://thundering-penguin-686.notion.site/Milestone-28e7bcd1304e80a8873de9c8e9ed263d?source=copy_link)  
+[weekly progress](https://morning-drawbridge-ada.notion.site/2025-CSED332-Team-Gray-Weekly-Progress-2a8be201a70880eeb908fbfeaf81ee4b?source=copy_link)  
+Milestones: [milestones](https://morning-drawbridge-ada.notion.site/Milestone-2a8be201a708800c8f46e07d7411c685?source=copy_link)  
 ### Design & Structure
-Project Design: [design](https://thundering-penguin-686.notion.site/Design-2927bcd1304e8022ac6cd595710103bb?source=copy_link)  
-Project Directory: [directory structure](https://thundering-penguin-686.notion.site/Project-Directory-2967bcd1304e8050a370d4eaa183c7e9?source=copy_link)  
+Project Design: [design](https://morning-drawbridge-ada.notion.site/Design-2a8be201a708803a9b6ec997b20b5191?source=copy_link)  
+Project Directory: [directory structure](https://morning-drawbridge-ada.notion.site/Project-Directory-2a8be201a70880e6950cc0d8e20270eb?source=copy_link)  
