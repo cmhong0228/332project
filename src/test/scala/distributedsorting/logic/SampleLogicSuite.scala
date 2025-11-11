@@ -167,6 +167,65 @@ class RecordExtractorSuite extends FunSuite with RecordExtractor with Sampler{
     }
 }
 
+class SamplingPolicySuite extends FunSuite {
+    def createPolicy(
+        keySize: Int,
+        memory: Long,
+        ratio: Double,
+        bytesPerMachine: Long,
+        workers: Int
+    ): SamplingPolicy = new SamplingPolicy {
+        override val KEY_SIZE: Int = keySize
+        override val MEMORY_SIZE: Long = memory
+        override val MAX_MEMORY_USAGE_RATIO: Double = ratio
+        override val BYTES_PER_MACHINE: Long = bytesPerMachine
+        override val numWorkers: Int = workers
+    }
+
+    val delta = 1e-8
+
+    test("SamplingPolicy: memory bound case") {
+        val policy = createPolicy(
+            keySize = 10,
+            memory = 1000L,
+            ratio = 0.5,
+            bytesPerMachine = 100L,
+            workers = 10
+        )
+        
+        assertEquals(policy.numSampleRecords, 50.0, delta)
+
+        assertEquals(policy.calculateSamplingRatio(1000L), 0.05, delta)
+    }
+
+    test("SamplingPolicy: machine bound case") {
+        val policy = createPolicy(
+            keySize = 10,
+            memory = 10000L,
+            ratio = 0.5,
+            bytesPerMachine = 50L,
+            workers = 10
+        )
+        
+        assertEquals(policy.numSampleRecords, 50.0, delta)
+
+        assertEquals(policy.calculateSamplingRatio(5000L), 0.01, delta)
+    }
+
+    test("SamplingPolicy: calculateSamplingRatio should return 0.0 if numTotalRecords is 0") {
+        val policy = createPolicy(10, 1000L, 0.5, 100L, 10)
+        
+        assertEquals(policy.calculateSamplingRatio(0L), 0.0)
+    }
+
+    test("SamplingPolicy: calculateSamplingRatio should return 1.0 if the ratio exceed 1") {
+        val policy = createPolicy(10, 1000L, 0.5, 100L, 10)
+        assertEquals(policy.numSampleRecords, 50.0, delta)
+
+        assertEquals(policy.calculateSamplingRatio(40L), 1.0)
+    }
+}
+
 class PivotSelectorSuite extends FunSuite with PivotSelector {
     val KEY_SIZE = 8
     val numWorkers = 10
