@@ -6,6 +6,7 @@ import scala.util.Random
 import scala.jdk.CollectionConverters._
 import java.io.IOException
 import distributedsorting.logic.FileRecordIterator
+import scala.math.min
 
 /**
  * Sampler 트레이트는 주어진 확률에 따라 레코드 스트림에서 Key를 추출하는 순수 샘플링 알고리즘의 책임을 정의
@@ -132,11 +133,12 @@ trait SamplingPolicy {
     val MEMORY_SIZE: Long
     val MAX_MEMORY_USAGE_RATIO: Double
     val BYTES_PER_MACHINE: Long
-    val MAX_BYTES_PER_MACHINE_DESIGNED: Long
+    //val MAX_BYTES_PER_MACHINE_DESIGNED: Long
     val numWorkers: Int
 
+    val usableMemory = MEMORY_SIZE * MAX_MEMORY_USAGE_RATIO
     // sampling시 사용할 record 수
-    val numSampleRecords: Long = ???
+    val numSampleRecords: Double = min(usableMemory/KEY_SIZE, numWorkers*BYTES_PER_MACHINE/KEY_SIZE.toDouble)
 
     /**
      * 여러 제약 조건(메모리, 머신당 최대 용량 등)을 고려하여 최종적으로 적용해야 할 샘플링 비율(k/n)을 계산
@@ -144,7 +146,10 @@ trait SamplingPolicy {
      * @param numTotalRecords 모든 Worker로부터 보고된 총 레코드 수 (모집단 크기).
      * @return 최종 적용할 샘플링 비율 (0.0 < ratio <= 1.0).
      */
-    def calculateSamplingRatio(numTotalRecords: Long): Double = ???
+    def calculateSamplingRatio(numTotalRecords: Long): Double = {
+        if (numTotalRecords == 0) 0.0
+        else min(numSampleRecords/numTotalRecords, 1.0)
+    }
 }
     
 /**
