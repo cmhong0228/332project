@@ -20,13 +20,13 @@ trait Sampler {
      * @param samplingRatio 마스터로부터 받은 샘플링 확률 (k/n)
      * @return 샘플링된 Key 리스트 (Seq[Key])
      */
-    def sampleKeys(inputIterator: Iterator[Key], samplingRatio: Double): Seq[Key] = {
+    def sampleKeys(inputIterator: Iterator[Record], samplingRatio: Double): Seq[Key] = {
         val rand = new Random()
 
         val sampledKeysIterator = inputIterator.collect {
-            case key if rand.nextDouble() < samplingRatio =>
-                assert(key.length == KEY_SIZE)
-                key
+            case record if rand.nextDouble() < samplingRatio =>
+                assert(record.length >= KEY_SIZE)
+                record.take(KEY_SIZE)
         }
 
         sampledKeysIterator.toSeq
