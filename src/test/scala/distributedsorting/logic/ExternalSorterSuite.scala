@@ -3,9 +3,8 @@ package distributedsorting.logic
 import distributedsorting.logic.ExternalSorter
 import distributedsorting.distributedsorting._
 import munit.FunSuite
-import munit.FunFixture
+import munit.FunFixtures
 import java.nio.file.{Files, Path, Paths}
-import scala.collection.JavaConverters._
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
@@ -36,7 +35,8 @@ object TestIOUtils {
     }
 }
 
-class TestExternalSorter(val ordering: Ordering[Record]) extends ExternalSorter {
+class TestExternalSorter(ordering: Ordering[Record]) extends ExternalSorter {
+    val RECORD_SIZE: Int = 8
     val externalSorterInputDirectory: Path = Paths.get("/dummy/in")
     val externalSorterOutputDirectory: Path = Paths.get("/dummy/out")
     val externalSorterTempDirectory: Path = Paths.get("/dummy/temp")
@@ -44,6 +44,7 @@ class TestExternalSorter(val ordering: Ordering[Record]) extends ExternalSorter 
     val chunkSize: Long = 2
     val outputPrefix: String = "partition"
     val outputStartPostfix: Int = 1
+    val externalSorterOrdering: Ordering[Record] = ordering
 }
 
 class ExternalSorterTestSuite extends FunSuite {
@@ -73,8 +74,8 @@ class ExternalSorterTestSuite extends FunSuite {
     // 테스트 간에 공유할 임시 디렉토리 구조를 위한 FunFixture 정의
     case class TestEnv(base: Path, input: Path, output: Path, temp: Path)
     
-    val tempDirFixture: FunFixture[TestEnv] = FunFixture.setup(
-        _ => {
+    val tempDirFixture: FunFixture[TestEnv] = FunFixture(
+        setup = { _ => 
             // Setup: 테스트 전 임시 디렉토리 생성
             val baseDir = Files.createTempDirectory("external_sort_munit_test")
             val inputDir = Files.createDirectories(baseDir.resolve("input"))
@@ -90,10 +91,11 @@ class ExternalSorterTestSuite extends FunSuite {
             TestIOUtils.writeRecordsToFile(inputDir.resolve("block6.data"), Iterator(longToRecord(1L), longToRecord(4L)))
             
             TestEnv(baseDir, inputDir, outputDir, tempDir)
+        }, 
+        teardown = { env =>
+            // Teardown: 테스트 후 임시 디렉토리 정리
+            TestIOUtils.cleanUpDirectory(env.base)
         }
-    )(
-        // Teardown: 테스트 후 임시 디렉토리 정리
-        env => TestIOUtils.cleanUpDirectory(env.base)
     )
 
     test("ExternalSorter: splitGroup should partition files correctly based on numMaxMergeGroup") {
@@ -118,7 +120,7 @@ class ExternalSorterTestSuite extends FunSuite {
 
     tempDirFixture.test("ExternalSorter: getInputFiles should read all files from the input directory") { env =>
         // 통합 테스트용 인스턴스 (I/O 경로가 실제 임시 경로)
-        val sorter = new TestExternalSorter {
+        val sorter = new TestExternalSorter(externalSorterOrdering) {
             override val externalSorterInputDirectory: Path = env.input
         }
         val files = sorter.getInputFiles()
@@ -129,18 +131,18 @@ class ExternalSorterTestSuite extends FunSuite {
 
     tempDirFixture.test("ExternalSorter: executeExternalSort should run the full process and produce a fully sorted file") { env =>
         // 통합 테스트용 인스턴스 (I/O 경로가 실제 임시 경로)
-        val sorter = new TestExternalSorter {
+        val sorter = new TestExternalSorter(externalSorterOrdering) {
             override val externalSorterInputDirectory: Path = env.input
             override val externalSorterOutputDirectory: Path = env.output
             override val externalSorterTempDirectory: Path = env.temp
             override val numMaxMergeGroup: Int = 2
-            override val chunkSize: Long = 2L
+            override val chunkSize: Long = 2L * 8
         }
 
         sorter.executeExternalSort()
         
         // 1. 출력 디렉토리에 파일이 존재하는지 검증
-        assert(Files.list(env.output).findFirst().isPresent, s"no file in ${env.output}")
+        assert(Files.list(env.output).findFirst().isPresent, s"no file in ${sorter.externalSorterOutputDirectory}")
 
         // 2. 출력 디렉토리의 '모든' 파일을 읽어와 전체 정렬 여부 검증
         val resultRecords = TestIOUtils.readAllRecordsFromDirectory(env.output)
