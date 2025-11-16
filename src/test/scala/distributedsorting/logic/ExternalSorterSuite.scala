@@ -40,7 +40,7 @@ class TestExternalSorter(ordering: Ordering[Record]) extends ExternalSorter {
     val externalSorterInputDirectory: Path = Paths.get("/dummy/in")
     val externalSorterOutputDirectory: Path = Paths.get("/dummy/out")
     val externalSorterTempDirectory: Path = Paths.get("/dummy/temp")
-    val numMaxMergeGroup: Int = 3
+    override val numMaxMergeGroup: Int = 3
     val chunkSize: Long = 2
     val outputPrefix: String = "partition"
     val outputStartPostfix: Int = 1
