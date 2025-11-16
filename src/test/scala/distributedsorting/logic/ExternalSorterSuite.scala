@@ -45,6 +45,9 @@ class TestExternalSorter(ordering: Ordering[Record]) extends ExternalSorter {
     val outputPrefix: String = "partition"
     val outputStartPostfix: Int = 1
     val externalSorterOrdering: Ordering[Record] = ordering
+    val MEMORY_SIZE: Long = 0L
+    val EXTERNAL_SORT_USABLE_MEMORY_RATIO: Double = 0
+    val BUFFER_SIZE: Long = 0L
 }
 
 class ExternalSorterTestSuite extends FunSuite {
@@ -97,6 +100,25 @@ class ExternalSorterTestSuite extends FunSuite {
             TestIOUtils.cleanUpDirectory(env.base)
         }
     )
+
+    test("ExternalSorter: calculation of numMaxMergeGroup should be correct") { 
+        val sorter = new ExternalSorter {
+            val RECORD_SIZE: Int = 8
+            val externalSorterInputDirectory: Path = Paths.get("/dummy/in")
+            val externalSorterOutputDirectory: Path = Paths.get("/dummy/out")
+            val externalSorterTempDirectory: Path = Paths.get("/dummy/temp")
+            val chunkSize: Long = 2
+            val outputPrefix: String = "partition"
+            val outputStartPostfix: Int = 1
+            val externalSorterOrdering: Ordering[Record] = null
+            val MEMORY_SIZE: Long = 104L
+            val EXTERNAL_SORT_USABLE_MEMORY_RATIO: Double = 0.5
+            val BUFFER_SIZE: Long = 10L
+        }
+        assertEquals(sorter.totalUsableMemory, 52.0, 1e-9)
+        assertEquals(sorter.totalAvailableBuffers, 5)
+        assertEquals(sorter.numMaxMergeGroup, 4)
+    }
 
     test("ExternalSorter: splitGroup should partition files correctly based on numMaxMergeGroup") {
         val sorter = new TestExternalSorter(externalSorterOrdering)
