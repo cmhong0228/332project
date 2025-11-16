@@ -62,11 +62,22 @@ trait ExternalSorter {
      */
     val outputStartPostfix: Int
 
+    /** 
+     * config for numMaxMergeGroup
+     */
+    val MEMORY_SIZE: Long
+    val EXTERNAL_SORT_USABLE_MEMORY_RATIO: Double
+    val BUFFER_SIZE: Long
+
+    val totalUsableMemory: Double = MEMORY_SIZE * EXTERNAL_SORT_USABLE_MEMORY_RATIO
+    val totalAvailableBuffers: Int = (totalUsableMemory / BUFFER_SIZE).toInt
+
     /**
      * k-way merge 단계에서 한 번에 병합할 수 있는 최대 파일 또는 스트림의 개수(k 값)
      * 이 값은 시스템의 메모리 제한을 고려하여 설정
+     * 총 버퍼 수 - 출력 버퍼(1)
      */
-    val numMaxMergeGroup: Int
+    val numMaxMergeGroup: Int = totalAvailableBuffers - 1
 
     /**
      * 주어진 파일 경로 시퀀스를 최대 `numMaxMergeGroup` 크기의 그룹으로 분할
