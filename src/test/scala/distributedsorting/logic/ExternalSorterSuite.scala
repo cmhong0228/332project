@@ -129,6 +129,62 @@ class ExternalSorterTestSuite extends FunSuite {
         assert(files.map(_.getFileName.toString).toSet == Set("block1.data", "block2.data", "block3.data", "block4.data", "block5.data", "block6.data"))
     }
 
+    tempDirFixture.test("ExternalSorter: merge should return the same file if given a single file") { env =>
+        val sorter = new TestExternalSorter(externalSorterOrdering) {
+        override val externalSorterTempDirectory: Path = env.temp
+        }
+
+        // 1. 단일 정렬 파일 생성
+        val sortedFile1 = env.temp.resolve("single_file.bin")
+        TestIOUtils.writeRecordsToFile(sortedFile1, Iterator(longToRecord(1L), longToRecord(5L)))
+        
+        val inputFiles = Seq(sortedFile1)
+        
+        // 2. merge 호출
+        val resultPath = sorter.merge(inputFiles)
+
+        // 3. merge()는 루프를 타지 않고 입력 파일과 동일한 경로를 반환해야 함
+        assertEquals(resultPath, sortedFile1)
+        
+        // 4. 내용 확인
+        val resultRecords = TestIOUtils.readAllRecordsFromFile(resultPath)
+        assertEquals(resultRecords.map(recordToLong), Seq(1L, 5L))
+    }
+
+    tempDirFixture.test("ExternalSorter: merge should correctly merge multiple pre-sorted files (multi-pass)") { env =>
+        // 1. Sorter 인스턴스 생성
+        val sorter = new TestExternalSorter(externalSorterOrdering) {
+            override val externalSorterTempDirectory: Path = env.temp
+            override val numMaxMergeGroup: Int = 2 
+        }
+
+        // 2. 3개의 '미리 정렬된' 입력 파일 생성
+        val sortedFile1 = env.temp.resolve("merge_in_1.bin")
+        val sortedFile2 = env.temp.resolve("merge_in_2.bin")
+        val sortedFile3 = env.temp.resolve("merge_in_3.bin")
+
+        TestIOUtils.writeRecordsToFile(sortedFile1, Iterator(longToRecord(1L), longToRecord(5L), longToRecord(9L)))
+        TestIOUtils.writeRecordsToFile(sortedFile2, Iterator(longToRecord(2L), longToRecord(6L), longToRecord(10L)))
+        TestIOUtils.writeRecordsToFile(sortedFile3, Iterator(longToRecord(3L), longToRecord(4L), longToRecord(8L)))
+
+        val inputFiles = Seq(sortedFile1, sortedFile2, sortedFile3)
+        val expectedLongs = Seq(1L, 2L, 3L, 4L, 5L, 6L, 8L, 9L, 10L)
+
+        // 3. merge 함수 호출
+        val resultPath = sorter.merge(inputFiles)
+
+        // 4. 최종 결과 파일의 내용을 읽어 전체 정렬 확인
+        val resultRecords = TestIOUtils.readAllRecordsFromFile(resultPath)
+        val resultLongs = resultRecords.map(recordToLong)
+
+        assertEquals(resultLongs, expectedLongs)
+
+        // 5. 최종 파일이 임시 디렉토리에 있는지,
+        //    그리고 다단계 병합의 결과물(pass-2)인지 확인
+        assert(resultPath.startsWith(env.temp), "Result file should be in the temp directory")
+        assert(resultPath.getFileName.toString.startsWith("pass-2-group-"), "Should be a multi-pass merge result")
+    }
+
     tempDirFixture.test("ExternalSorter: executeExternalSort should run the full process and produce a fully sorted file") { env =>
         // 통합 테스트용 인스턴스 (I/O 경로가 실제 임시 경로)
         val sorter = new TestExternalSorter(externalSorterOrdering) {
@@ -146,11 +202,11 @@ class ExternalSorterTestSuite extends FunSuite {
 
         // 2. 출력 디렉토리의 '모든' 파일을 읽어와 전체 정렬 여부 검증
         val resultRecords = TestIOUtils.readAllRecordsFromDirectory(env.output)
-        val resultStrings = resultRecords.map(record => new String(record)).toSeq
+        val resultLongs = resultRecords.map(recordToLong)
 
-        val expectedSortedSeq = Seq("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12")
+        val expectedSortedSeq = Seq(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L, 12L)
 
-        assertEquals(resultStrings, expectedSortedSeq)
+        assertEquals(resultLongs, expectedSortedSeq)
         
         // 3. 임시 파일 정리 확인 (cleanUpTempFiles는 executeExternalSort 내에서 호출됨)
         assert(!Files.list(env.temp).findFirst().isPresent, s"should clean up temp ${env.temp}")
