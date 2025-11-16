@@ -146,7 +146,7 @@ trait ExternalSorter {
                 var iterators: Seq[FileRecordIterator] = null 
                 try {
                     // (5) 각 파일에 대한 이터레이터 생성
-                    iterators = group.map(path => new FileRecordIterator(path))
+                    iterators = group.map(path => new FileRecordIterator(path, recordSize = RECORD_SIZE))
                     
                     // (6) k-way merge 수행
                     val mergedIter = iteratorMerge(iterators)
@@ -222,12 +222,13 @@ trait ExternalSorter {
         filePrefix: String,
         startPostfixNumber: Int
     ): Unit = {        
-        if (!Files.exists(inputFilePath) || recordsPerFile <= 0) {
+        if (!Files.exists(inputFilePath) || recordsPerFile <= 0 || Files.size(inputFilePath) == 0) {
             return
         }
 
-        val inputIter = new FileRecordIterator(inputFilePath)
+        val inputIter = new FileRecordIterator(inputFilePath, recordSize = RECORD_SIZE)
         var fileCounter = startPostfixNumber
+        assert(inputIter.hasNext)
         try {
             // (1) 입력 이터레이터가 끝날 때까지 반복
             while (inputIter.hasNext) {
@@ -267,6 +268,7 @@ trait ExternalSorter {
 
             // (2) 다단계 병합 수행 -> 하나의 거대 정렬 파일(temp) 생성
             val finalMergedFile = merge(sortedRuns)
+            assert(Files.size(finalMergedFile) > 0)
 
             // (3) 바이트 단위 chunkSize를 레코드 개수로 변환
             val recordsPerChunk = chunkSize / RECORD_SIZE
