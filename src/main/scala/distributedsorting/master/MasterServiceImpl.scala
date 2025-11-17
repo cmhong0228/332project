@@ -4,7 +4,8 @@ import distributedsorting.distributedsorting._
 import distributedsorting.logic._
 import scala.concurrent.{Future, Promise, ExecutionContext}
 import com.typesafe.config.ConfigFactory
-import distributedsorting.{MasterServiceGrpc, RecordCountReport, SampleKeyList, SamplingRatio, SampleDecision, PartitionInfo, KeyMessage}import java.util.concurrent.ConcurrentLinkedQueue
+import distributedsorting.{MasterServiceGrpc, RecordCountReport, SampleKeyList, SamplingRatio, SampleDecision, PartitionInfo, KeyMessage}
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import scala.jdk.CollectionConverters._
 import com.google.protobuf.ByteString
