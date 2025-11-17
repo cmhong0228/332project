@@ -40,7 +40,7 @@ class TestExternalSorter(ordering: Ordering[Record]) extends ExternalSorter {
     val externalSorterInputDirectory: Path = Paths.get("/dummy/in")
     val externalSorterOutputDirectory: Path = Paths.get("/dummy/out")
     val externalSorterTempDirectory: Path = Paths.get("/dummy/temp")
-    override val numMaxMergeGroup: Int = 3
+    override lazy val numMaxMergeGroup: Int = 3
     val chunkSize: Long = 2
     val outputPrefix: String = "partition"
     val outputStartPostfix: Int = 1
@@ -177,7 +177,7 @@ class ExternalSorterTestSuite extends FunSuite {
         // 1. Sorter 인스턴스 생성
         val sorter = new TestExternalSorter(externalSorterOrdering) {
             override val externalSorterTempDirectory: Path = env.temp
-            override val numMaxMergeGroup: Int = 2 
+            override lazy val numMaxMergeGroup: Int = 2 
         }
 
         // 2. 3개의 '미리 정렬된' 입력 파일 생성
@@ -213,7 +213,7 @@ class ExternalSorterTestSuite extends FunSuite {
             override val externalSorterInputDirectory: Path = env.input
             override val externalSorterOutputDirectory: Path = env.output
             override val externalSorterTempDirectory: Path = env.temp
-            override val numMaxMergeGroup: Int = 2
+            override lazy val numMaxMergeGroup: Int = 2
             override val chunkSize: Long = 2L * 8
         }
 
