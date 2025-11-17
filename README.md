@@ -8,3 +8,5 @@ Milestones: [milestones](https://morning-drawbridge-ada.notion.site/Milestone-2a
 ### Design & Structure
 Project Design: [design](https://morning-drawbridge-ada.notion.site/Design-2a8be201a708803a9b6ec997b20b5191?source=copy_link)  
 Project Directory: [directory structure](https://morning-drawbridge-ada.notion.site/Project-Directory-2a8be201a70880e6950cc0d8e20270eb?source=copy_link)  
+### Presentation
+Progress Presentation: [progress presentation](./(SD%20gray)%20Progress%20presentation.pptx)
