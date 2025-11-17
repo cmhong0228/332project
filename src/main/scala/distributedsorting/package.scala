@@ -4,6 +4,14 @@ package distributedsorting
  * distributedsorting 패키지 전체에서 사용할 멤버 정의
  */
 package object distributedsorting {
+    case class FileId(
+        sourceWorkerId: Int, // sourceworkerId after sort/partition
+        partitionId: Int,    // partitionId
+        sortedRunId: Int     // index (for same i, j)
+    ) {
+        def toFileName: String = s"file_${sourceWorkerId}_${partitionId}_${sortedRunId}.dat"
+    }
+
     /*
      * record를 저장할 type
      */
@@ -11,7 +19,6 @@ package object distributedsorting {
 
     /*
      * key를 저장할 type
-     * record에서 따로 key를 분리해서 고려하지는 않음
      * Record와 같은 타입이지만 편의상 분리, key만을 저장하는 경우 사용
      */
     type Key = Array[Byte]
