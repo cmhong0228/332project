@@ -16,13 +16,20 @@ message KeyMessage {
 // 2. 워커 -> 마스터 메시지
 // =========================================================
 
-// 데이터 수 통보를 위한 메시지
+// Registration: 워커 등록 요청 메시지
+message WorkerInfo {
+  string worker_id = 1; // 워커의 고유 ID 또는 IP:Port
+  string ip = 2;        // 워커의 IP 주소
+  int32 port = 3;       // 워커가 데이터를 받을 Port (나중에 Shuffle 단계에서 필요할 수 있음)
+}
+
+// sampling: 데이터 수 통보를 위한 메시지
 message RecordCountReport {
     string worker_id = 1;      // 워커 ID (등록된 워커임을 확인)
     int64 total_record_count = 2; // 워커가 가진 총 레코드 수 (n_i)
 }
 
-// 워커가 마스터에게 샘플링된 Key 리스트를 보낼 때 사용
+// sampling: 워커가 마스터에게 샘플링된 Key 리스트를 보낼 때 사용
 message SampleKeyList {
     string worker_id = 1;
     repeated KeyMessage keys = 2;     // 샘플링된 Key들의 리스트
@@ -32,12 +39,18 @@ message SampleKeyList {
 // 3. 마스터 -> 워커 메시지
 // =========================================================
 
-// 마스터가 워커에게 샘플링 비율을 보낼 때 사용
+// Registration: 워커 등록 응답 메시지
+message RegisterResponse {
+  bool success = 1;     // 등록 성공 여부
+  repeated WorkerInfo worker_list = 2;
+}
+
+// sampling: 마스터가 워커에게 샘플링 비율을 보낼 때 사용
 message SamplingRatio {
     double ratio = 1;          // 샘플링 확률 (k/n)
 }
 
-// 마스터가 워커에게 최종 파티션 정보와 순서를 보낼 때 사용
+// sampling: 마스터가 워커에게 최종 파티션 정보와 순서를 보낼 때 사용
 message PartitionInfo {
     // 마스터가 결정한 파티션 경계 Key 리스트 (W-1개)
     repeated KeyMessage pivots = 1; 
@@ -59,6 +72,9 @@ message SamplingControl {
 // =========================================================
 
 service MasterService {
+    // 워커가 마스터에게 등록할 때 호출하는 함수
+    rpc RegisterWorker (RegisterRequest) returns (RegisterResponse)
+
     // 샘플링 비율 결정 단계
     // 등록된 워커가 자신의 레코드 수를 보고하고, 마스터는 샘플링 비율을 응답
     rpc ReportRecordCount (RecordCountReport) returns (SamplingRatio);
