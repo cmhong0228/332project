@@ -4,17 +4,64 @@ import distributedsorting.distributedsorting._
 import distributedsorting.logic._
 import scala.concurrent.{Future, Promise, ExecutionContext}
 import com.typesafe.config.ConfigFactory
-import distributedsorting.{MasterServiceGrpc, RecordCountReport, SampleKeyList, SamplingRatio, SampleDecision, PartitionInfo, KeyMessage}
-import java.util.concurrent.ConcurrentLinkedQueue
+import distributedsorting._
+import java.util.concurrent.{ConcurrentLinkedQueue, CopyOnWriteArrayList}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import scala.jdk.CollectionConverters._
 import com.google.protobuf.ByteString
 
-class MasterServiceImpl(val numWorkers: Int) extends MasterServiceGrpc.MasterService with SamplingPolicy with PivotSelector{
+class MasterServiceImpl(val numWorkers: Int)(implicit ec: ExecutionContext) extends MasterServiceGrpc.MasterService with SamplingPolicy with PivotSelector{
     private val config = ConfigFactory.load()
     private val configPath = "distributedsorting"
 
-    // ======================= Sampling =======================
+    // ==================================
+    // 상태 관리 변수 (Thread-Safe)
+    // ==================================
+    case class WorkerState(info: WorkerInfo, status: String)
+    private val workers = new CopyOnWriteArrayList[WorkerInfo]()
+
+    private val connectedWorkersCount = new AtomicInteger(0)
+    
+    // ==================================
+    // Registration
+    // ==================================
+    private val pendingRegisterPromises = new CopyOnWriteArrayList[Promise[RegisterResponse]]()
+
+    /**
+     * [RPC 메서드] Worker가 Master에 등록할 때 사용
+     * @param request RegisterRequest worker 정보 포함
+     * @return RegisterResponse 
+     */
+    override def registerWorker(request: WorkerInfo): Future[RegisterResponse] = {
+        val myPromise = Promise[RegisterResponse]()
+
+        this.synchronized {
+            workers.add(request)
+            pendingRegisterPromises.add(myPromise)
+            
+            val currentCount = connectedWorkersCount.incrementAndGet()
+
+            if (currentCount == numWorkers) {
+                val allWorkersSeq = workers.asScala.toSeq
+
+                val response = RegisterResponse(
+                    success = true,
+                    workerList = allWorkersSeq
+                )
+
+                pendingRegisterPromises.asScala.foreach { promise =>
+                    promise.success(response)
+                }
+                
+                pendingRegisterPromises.clear()
+            }
+        }
+        myPromise.future
+    }
+
+    // ==================================
+    // Sampling
+    // ==================================
     /*
      * Sampling(Master)
      * 역할
