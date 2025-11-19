@@ -73,7 +73,7 @@ message SamplingControl {
 
 service MasterService {
     // 워커가 마스터에게 등록할 때 호출하는 함수
-    rpc RegisterWorker (RegisterRequest) returns (RegisterResponse)
+    rpc RegisterWorker (WorkerInfo) returns (RegisterResponse);
 
     // 샘플링 비율 결정 단계
     // 등록된 워커가 자신의 레코드 수를 보고하고, 마스터는 샘플링 비율을 응답
