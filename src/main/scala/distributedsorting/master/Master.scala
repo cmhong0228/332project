@@ -2,14 +2,14 @@ package distributedsorting.master
 
 import scopt.OptionParser
 import java.net.InetAddress
-import io.grpc.ServerBuilder
+import io.grpc.{Server, ServerBuilder}
+import scala.concurrent.ExecutionContext
+import distributedsorting.distributedsorting._
 
 object Master extends ShutdownController{
     var server: Server = _
 
-    def main(args: Array[String]): Unit = {
-        implicit val ec: ExecutionContext = ExecutionContext.global
-        
+    def main(args: Array[String]): Unit = {        
         MasterArgsParser.parser.parse(args, MasterConfig()) match {
             case Some(config) if config.numWorkers > 0 =>
                 masterApplication(config.numWorkers)
@@ -18,8 +18,9 @@ object Master extends ShutdownController{
     }
 
     def masterApplication(numWorkers: Int): Unit = {
-        private val masterIp: String = InetAddress.getLocalHost.getHostAddress 
-        private val masterService = new MasterServiceImpl(numWorkers, this)
+        implicit val ec: ExecutionContext = ExecutionContext.global
+        val masterIp: String = InetAddress.getLocalHost.getHostAddress 
+        val masterService = new MasterServiceImpl(numWorkers, this)
         
         // 포트 번호 자동 설정
         server = ServerBuilder.forPort(0)
