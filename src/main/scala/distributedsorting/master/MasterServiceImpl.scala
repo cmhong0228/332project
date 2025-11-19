@@ -4,7 +4,7 @@ import distributedsorting.distributedsorting._
 import distributedsorting.logic._
 import scala.concurrent.{Future, Promise, ExecutionContext}
 import com.typesafe.config.ConfigFactory
-import distributedsorting.{MasterServiceGrpc, RecordCountReport, SampleKeyList, SamplingRatio, SampleDecision, PartitionInfo, KeyMessage}
+import distributedsorting.distributedsorting.{MasterServiceGrpc, RecordCountReport, SampleKeyList, SamplingRatio, SampleDecision, PartitionInfo, KeyMessage}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import scala.jdk.CollectionConverters._
@@ -52,19 +52,23 @@ class MasterServiceImpl(val numWorkers: Int) extends MasterServiceGrpc.MasterSer
      * 내부적으로 SamplingPolicy.calculateSamplingRatio를 호출
      */
     override def reportRecordCount(request: RecordCountReport): Future[SamplingRatio] = {
-        totalRecordSum.addAndGet(request.totalRecordCount)
-        val currentCount = reportCounter.incrementAndGet()
+        val future = samplingRatioPromise.future
 
-        if (currentCount == numWorkers) {
-            val totalRecords = totalRecordSum.get()
-            val ratio = calculateSamplingRatio(totalRecords)
-            
-            val response = SamplingRatio(ratio = ratio)
-            
-            samplingRatioPromise.success(response)
+        this.synchronized {
+            totalRecordSum.addAndGet(request.totalRecordCount)
+            val currentCount = reportCounter.incrementAndGet()
+
+            if (currentCount == numWorkers) {
+                val totalRecords = totalRecordSum.get()
+                val ratio = calculateSamplingRatio(totalRecords)
+                
+                val response = SamplingRatio(ratio = ratio)
+                
+                samplingRatioPromise.success(response)
+            }
         }
-
-        samplingRatioPromise.future
+        
+        future
     }
 
     /**
@@ -75,35 +79,39 @@ class MasterServiceImpl(val numWorkers: Int) extends MasterServiceGrpc.MasterSer
      * @return SampleDecision (계산된 최종 Pivot Key 리스트를 Worker에게 전송)
      */
     override def sendSampleKeys(request: SampleKeyList): Future[SampleDecision] = {
-        val keysFromWorker: Seq[Key] = request.keys.map(_.value.toByteArray)
-        
-        allSamples.addAll(keysFromWorker.asJava)
-        
-        val currentCount = sampleCounter.incrementAndGet()
-        
-        if (currentCount == numWorkers) {
-            val aggregatedKeys: Seq[Key] = allSamples.asScala.toSeq
-            val sortedKeys = sortSamples(aggregatedKeys)
-            val pivotKeys: Vector[Key] = selectPivots(sortedKeys)
-            val paddedpivots: Vector[Record] = createPaddedPivots(pivotKeys)
-            
-            val protoPivots: Seq[KeyMessage] = pivotKeys.map { keyArray =>
-                KeyMessage(value = ByteString.copyFrom(keyArray))
-            }
-            
-            val partitionInfo = PartitionInfo(pivots = protoPivots)
-            val response = SampleDecision(
-                proceed = true,
-                content = SampleDecision.Content.PartitionInfo(partitionInfo)
-            )
-            /*
-                TODO: sample된 개수 맞지 않는 경우 처리 (일반적으로 일어나진 않지만 예외처리)
-            */
-            
-            sampleDecisionPromise.success(response)
-        }
+        val future = sampleDecisionPromise.future
 
-        sampleDecisionPromise.future
+        this.synchronized {
+            val keysFromWorker: Seq[Key] = request.keys.map(_.value.toByteArray)
+        
+            allSamples.addAll(keysFromWorker.asJava)
+            
+            val currentCount = sampleCounter.incrementAndGet()
+            
+            if (currentCount == numWorkers) {
+                val aggregatedKeys: Seq[Key] = allSamples.asScala.toSeq
+                val sortedKeys = sortSamples(aggregatedKeys)
+                val pivotKeys: Vector[Key] = selectPivots(sortedKeys)
+                val paddedpivots: Vector[Record] = createPaddedPivots(pivotKeys)
+                
+                val protoPivots: Seq[KeyMessage] = pivotKeys.map { keyArray =>
+                    KeyMessage(value = ByteString.copyFrom(keyArray))
+                }
+                
+                val partitionInfo = PartitionInfo(pivots = protoPivots)
+                val response = SampleDecision(
+                    proceed = true,
+                    content = SampleDecision.Content.PartitionInfo(partitionInfo)
+                )
+                /*
+                    TODO: sample된 개수 맞지 않는 경우 처리 (일반적으로 일어나진 않지만 예외처리)
+                */
+                
+                sampleDecisionPromise.success(response)
+            }
+        }
+        
+        future
     }
 
 }
