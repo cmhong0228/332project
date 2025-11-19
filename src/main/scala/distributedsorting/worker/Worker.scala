@@ -37,7 +37,7 @@ class WorkerApp (
   port: Int,
   inputDirsStr: Seq[String],
   outputDirStr: String
-) extends MasterClient {     
+) extends MasterClient with ExternalSorter{     
   val config = ConfigFactory.load()
   val configPath = "distributedsorting"
   val workerIp: String = InetAddress.getLocalHost.getHostAddress
@@ -46,13 +46,27 @@ class WorkerApp (
 
   val inputDirs: Seq[Path] = inputDirsStr.map(Paths.get(_))
   val outputDir: Path = Paths.get(outputDirStr)
+  val tempDir: Path = outputDir.resolve("temp")
   
   implicit override val ec: ExecutionContext = ExecutionContext.global   
   override val masterIp = ip
   override val masterPort = port
   override val workerInfo = new WorkerInfo(workerId = s"$workerIp:$workerPort", ip = workerIp, port = workerPort)
+
   override val KEY_SIZE = config.getInt(s"$configPath.record-info.key-length")
   override val RECORD_SIZE = config.getInt(s"$configPath.record-info.record-length")
+
+  // for ExternalSorter
+  val externalSorterInputDirectory: Path = tempDir.resolve("shuffle-output")
+  val externalSorterOutputDirectory: Path = outputDir
+  val externalSorterTempDirectory: Path = tempDir.resolve("external-sorter-temp")
+  val externalSorterOrdering: Ordering[Record] = createRecordOrdering(KEY_SIZE, KEY_SIZE)
+  val chunkSize: Long = config.getBytes(s"$configPath.external-sort.chunk-size").toLong  
+  val outputPrefix: String = config.getString(s"$configPath.external-sort.output-prefix")
+  val outputStartPostfix: Int = config.getInt(s"$configPath.external-sort.output-start-postfix")
+  val MEMORY_SIZE: Long = config.getBytes(s"$configPath.cluster-info.node-info.memory").toLong
+  val EXTERNAL_SORT_USABLE_MEMORY_RATIO: Double = config.getDouble(s"$configPath.external-sort.max-memory-usage-ratio")
+  val BUFFER_SIZE: Long = config.getBytes(s"$configPath.io.buffer-size").toLong
 
   var pivots: Vector[Record] = _
 
@@ -61,9 +75,19 @@ class WorkerApp (
 
     pivots = executeSampling(inputDirs)
 
-    // TODO
+    // TODO: Sort&Partition
+    println("sort")
+
+    reportSortCompletion()
+
+    // TODO: Shuffle
+
+    // TODO: Merge
+    // executeExternalSort()
+    println("merge")
 
     reportCompletion()
+    println("ex")
   }
 }
 
