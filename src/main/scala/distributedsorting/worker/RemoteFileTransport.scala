@@ -15,7 +15,7 @@ class RemoteFileTransport extends FileTransport {
         false
     }
 
-    override def serveFile(fileId: FileId, sourcePath: Path): Boolean = {
+    override def serveFile(fileId: FileId): Boolean = {
         // TODO: workerservice 호출
         false
     }

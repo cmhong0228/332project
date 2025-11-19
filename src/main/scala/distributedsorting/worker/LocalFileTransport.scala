@@ -1,7 +1,11 @@
 package distributedsorting.worker
 
 import distributedsorting.distributedsorting._
-import java.nio.file.Path
+import java.nio.file.{Files, Path, StandardCopyOption}
+import scala.concurrent.{ExecutionContext, Future, Promise}
+import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
+import scala.util.{Try, Success, Failure}
 
 /**
  * 워커 레지스트리의 최소 인터페이스
@@ -12,6 +16,7 @@ import java.nio.file.Path
 trait LocalTransportRegistry {
     def register(workerId: Int, transport: LocalFileTransport): Unit
     def get(workerId: Int): Option[LocalFileTransport]
+    def unregisterWorker(workerId: Int): Unit
 }
 
 // worker 하나에 대해 main thread, service thread를 분리하여
@@ -20,31 +25,149 @@ class LocalFileTransport(
     val workerId: Int,
     val sharedDirectory: Path,
     val registry: LocalTransportRegistry  // 최소 인터페이스만 요구
-) extends FileTransport {
+)(implicit ec: ExecutionContext) extends FileTransport {
+
+    // Service thread가 처리할 요청: (FileId, Promise[Option[Path]])
+    private val requestQueue: BlockingQueue[(FileId, Promise[Option[Path]])] = 
+        new LinkedBlockingQueue()
+    private val running = new AtomicBoolean(false)
+    private var serviceThread: Option[Thread] = None
+
+    // 이 Worker의 파티션 디렉토리 (읽기 전용)
+    private val myPartitionDir: Path = sharedDirectory
+        .resolve(s"worker_$workerId")
+        .resolve("partitions")
     
-    //서비스스레드 init
+    // 서비스 스레드 init
     override def init(): Unit = {
+        running.set(true)
+        
         // Service Thread 시작
         val thread = new Thread(() => {
-            println(s"[LocalFileTransport $workerId] Service thread started")
-            // TODO: 서비스 스레드 로직
+            println(s"[Service Thread $workerId] Started")
+        
+            while (running.get()) {
+                try {
+                    val request = requestQueue.poll(100, TimeUnit.MILLISECONDS)
+                    
+                    if (request != null) {
+                        val (fileId, promise) = request
+                        // Service thread가 파일 경로 제공
+                        val result = serveFile(fileId)
+                        promise.success(result)
+                    }
+                } catch {
+                    case _: InterruptedException => 
+                        Thread.currentThread().interrupt()
+                    case e: Exception =>
+                        println(s"[Service Thread $workerId] Error: ${e.getMessage}")
+                }
+            }
+            
+            println(s"[Service Thread $workerId] Stopped")
         })
+        thread.setName(s"ServiceThread-Worker-$workerId")
         thread.setDaemon(true)
         thread.start()
         
         // Registry에 워커 등록
         registry.register(workerId, this)
+        serviceThread = Some(thread)
     }
 
-    override def requestFile(fileId: FileId, destPath: Path): Boolean = {
-        // TODO: 서비스 스레드에 요청 후 destPath에 저장
-        false
+    override def requestFile(fileId: FileId, destPath: Path): Future[Try[Long]] = {
+        println(s"[Worker $workerId] Requesting file from Worker ${fileId.sourceWorkerId} " +
+            s"(thread: ${Thread.currentThread().getName})")
+    
+        // 자기 자신에게 요청하는 경우: Service thread 거치지 않고 직접 처리
+        if (fileId.sourceWorkerId == workerId) {
+            println(s"[Worker $workerId] Self-request detected, copying directly")
+            serveFile(fileId) match {
+                case Some(sourcePath) =>
+                    Future {
+                        try {
+                            val bytes: Long = Files.copy(
+                                sourcePath,
+                                destPath,
+                                StandardCopyOption.REPLACE_EXISTING
+                            )
+                            Success(bytes): Try[Long]
+                        } catch {
+                            case e: Exception => Failure(e): Try[Long]
+                        }
+                    }
+                case None =>
+                    Future.successful(Failure(
+                        new RuntimeException(s"File not found: ${fileId.toFileName}")
+                    ): Try[Long])
+            }
+        } else {
+            // 다른 워커에게 요청하는 경우: Service thread 통해서 처리
+            registry.get(fileId.sourceWorkerId) match {
+                case Some(targetTransport) =>
+                    val promise = Promise[Option[Path]]()
+                    
+                    // 대상 워커의 Service thread 큐에 요청 추가
+                    targetTransport.enqueueRequest(fileId, promise)
+                    
+                    // Service thread로부터 응답(파일 경로) 대기 후 파일 복사
+                    promise.future.map { pathOpt: Option[Path] =>
+                        pathOpt match {
+                            case Some(sourcePath) =>
+                                try {
+                                    val bytes: Long = Files.copy(
+                                        sourcePath,
+                                        destPath,
+                                        StandardCopyOption.REPLACE_EXISTING
+                                    )
+                                    Success(bytes): Try[Long]
+                                } catch {
+                                    case e: Exception => Failure(e): Try[Long]
+                                }
+                            case None =>
+                                Failure(new RuntimeException(s"File not found: ${fileId.toFileName}")): Try[Long]
+                        }
+                    }.recover {
+                        case e: Exception => Failure(e): Try[Long]
+                    }
+                    
+                case None =>
+                    Future.successful(Failure(
+                        new RuntimeException(s"Worker ${fileId.sourceWorkerId} not found in registry")
+                    ): Try[Long])
+            }
+        }
+    }
+    
+    /**
+     * 요청을 큐에 추가 (다른 워커의 main thread가 호출)
+     */
+    def enqueueRequest(fileId: FileId, promise: Promise[Option[Path]]): Unit = {
+        requestQueue.offer((fileId, promise))
     }
 
-    def serveFile(fileId: FileId, sourcePath: Path): Boolean = {
-        // TODO: 서비스 스레드에서 파일 제공
-        // 워커디렉토리에서 공유디렉토리에 파일 업로드하는 방식으로 제공 
-        // 또는 remote방식을 최대한 모사하기위해 streaming 등의 방식으로 제공
-        false
+    /**
+     * 파일 제공 (Service thread 또는 자기 자신의 main thread에서 호출)
+     */
+    def serveFile(fileId: FileId): Option[Path] = {
+        val filePath: Path = myPartitionDir.resolve(fileId.toFileName)
+    
+        if (Files.exists(filePath)) {
+            println(s"[Worker $workerId] Serving ${fileId.toFileName} " +
+                s"(thread: ${Thread.currentThread().getName})")
+            Some(filePath)
+        } else {
+            None
+        }
+    }
+
+    override def close(): Unit = {
+        if (running.compareAndSet(true, false)) {
+            serviceThread.foreach { thread =>
+                thread.interrupt()
+                thread.join(5000)
+            }
+            registry.unregisterWorker(workerId)
+        }
     }
 }
