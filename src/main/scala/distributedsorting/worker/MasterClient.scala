@@ -24,7 +24,7 @@ trait MasterClient { self: RecordCountCalculator with RecordExtractor =>
     private lazy val masterClient: MasterServiceStub = MasterServiceGrpc.stub(channel)
 
     /** 채널 종료 함수 */
-    def shutdown(): Unit = {
+    def cleanup(): Unit = {
         channel.shutdownNow()
     }
 
@@ -45,7 +45,7 @@ trait MasterClient { self: RecordCountCalculator with RecordExtractor =>
         }
 
         var success = false
-        var timeOut = Duration.Inf
+        val timeOut = Duration.Inf
     
         while (!success) {
             val result = Try(Await.result(attemptCall(), timeOut)) // TODO: 대기시간 설정
@@ -72,6 +72,26 @@ trait MasterClient { self: RecordCountCalculator with RecordExtractor =>
         }
     }
             
+    // ======================= Termination =======================
+    def ReportCompletion(): Unit = {
+        val timeOut = Duration.Inf
+        val reportFuture: Future[CompletionResponse] = masterClient.reportCompletion()
+    
+        val result = Try(Await.result(reportFuture, timeOut)) 
+
+        result match {
+            case Success(response) if response.success =>
+                ()
+                // 성공 시, 필요한 경우 추가
+
+            case _ =>
+                () 
+                // 실패 시, 예외처리 필요한 경우 추가
+        }
+        
+        cleanup()
+    }
+
     // ======================= Sampling =======================
     /*
      * Sampling(Worker)
