@@ -13,6 +13,7 @@ import com.google.protobuf.ByteString
 // master를 종료 시키기 위한 trait
 trait ShutdownController {
     def initiateShutdown(): Unit
+    def signalShutdown(): Unit
 }
 
 class MasterServiceImpl(val numWorkers: Int, private val shutdownController: ShutdownController)(implicit ec: ExecutionContext) extends MasterServiceGrpc.MasterService with SamplingPolicy with PivotSelector{
@@ -90,7 +91,37 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
 
                 pendingTerminationPromises.clear()
 
-                shutdownController.initiateShutdown()
+                //shutdownController.initiateShutdown()
+                shutdownController.signalShutdown()
+            }
+        }
+        
+        myPromise.future
+    }
+    
+    // ==================================
+    // communication
+    // ==================================
+    private val finishedSortWorkersCount = new AtomicInteger(0)
+    private val pendingSortTerminationPromises = new CopyOnWriteArrayList[Promise[CompletionResponse]]()
+
+    override def reportSortCompletion(request: WorkerInfo): Future[CompletionResponse] = {
+        val myPromise = Promise[CompletionResponse]() 
+
+        this.synchronized {
+            // TODO: 개수가 아닌 각 worker가 끝난건지 확인
+            pendingSortTerminationPromises.add(myPromise)
+
+            val currentFinished = finishedSortWorkersCount.incrementAndGet()
+            
+            if (currentFinished == numWorkers) {
+                val response = CompletionResponse(success = true)
+
+                pendingSortTerminationPromises.asScala.foreach { promise =>
+                    promise.success(response)
+                }
+
+                pendingSortTerminationPromises.clear()
             }
         }
         
