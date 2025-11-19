@@ -22,40 +22,41 @@ object Worker {
                 println(s"Input Directories: ${config.inputDirs.mkString(", ")}")
                 println(s"Output Directory: ${config.outputDir}")
                 
-                workerApplication(masterIp, masterPort, config.inputDirs, config.outputDir)
+                val workerApp = new WorkerApp(masterIp, masterPort, config.inputDirs, config.outputDir)
+                workerApp.run()
 
             case None =>
                 println("Argument parsing failed.")
         }
     }
+}
 
-    def workerApplication(inputMasterIp: String, inputMasterPort: Int, inputDirs: Seq[String], outputDir: String): Unit = {    
-        implicit val executionContext: ExecutionContext = ExecutionContext.global    
-        val workerIp: String = InetAddress.getLocalHost.getHostAddress
-        
-        // 포트 번호 자동 설정
-        // worker server 생성
+class WorkerApp (
+  ip: String,
+  port: Int,
+  inputDirs: Seq[String],
+  outputDir: String
+) extends MasterClient {     
+  val config = ConfigFactory.load()
+  val configPath = "distributedsorting"
+  val workerIp: String = InetAddress.getLocalHost.getHostAddress
+  // TODO: worker server 생성
+  val workerPort = 1234 // 추후에 변경 workerServer.getPort()
+  
+  implicit override val ec: ExecutionContext = ExecutionContext.global   
+  override val masterIp = ip
+  override val masterPort = port
+  override val workerInfo = new WorkerInfo(workerId = s"$workerIp:$workerPort", ip = workerIp, port = workerPort)
+  override val KEY_SIZE = config.getInt(s"$configPath.record-info.key-length")
+  override val RECORD_SIZE = config.getInt(s"$configPath.record-info.record-length")
 
-        //val workerPort = server.getPort
-        val workerPort = 1234
+  def run(): Unit = {
+    registerWorker()
 
-        val selfInfo = new WorkerInfo(workerId = s"$workerIp:$workerPort", ip = workerIp, port = workerPort)
+    // TODO
 
-        val masterClient = new MasterClient {
-            override val masterIp = inputMasterIp
-            override val masterPort = inputMasterPort
-            override val workerInfo = selfInfo
-            override val KEY_SIZE = config.getInt(s"$configPath.record-info.key-length")
-            override val RECORD_SIZE = config.getInt(s"$configPath.record-info.record-length")
-            implicit override val ec: ExecutionContext = executionContext
-        }
-
-        masterClient.registerWorker()
-        
-        // TODO
-
-        masterClient.reportCompletion()
-    }
+    reportCompletion()
+  }
 }
 
 case class WorkerConfig(
