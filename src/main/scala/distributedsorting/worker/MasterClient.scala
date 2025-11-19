@@ -75,6 +75,29 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
             
     // ======================= Termination =======================
     def reportCompletion(): Unit = {
+        println("req")
+        val timeOut = Duration.Inf
+        val reportFuture: Future[CompletionResponse] = masterClient.reportCompletion(workerInfo)
+        println("cmp")
+    
+        val result = Try(Await.result(reportFuture, timeOut)) 
+
+        result match {
+            case Success(response) if response.success =>
+                ()
+                // 성공 시, 필요한 경우 추가
+
+            case _ =>
+                () 
+                // 실패 시, 예외처리 필요한 경우 추가
+        }
+        println("cl")
+        cleanup()
+        println("done")
+    }
+
+    // ======================= Communication =======================
+    def reportSortCompletion(): Unit = {
         val timeOut = Duration.Inf
         val reportFuture: Future[CompletionResponse] = masterClient.reportCompletion(workerInfo)
     
@@ -89,8 +112,6 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
                 () 
                 // 실패 시, 예외처리 필요한 경우 추가
         }
-        
-        cleanup()
     }
 
     // ======================= Sampling =======================
