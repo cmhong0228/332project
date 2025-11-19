@@ -69,10 +69,11 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
     private val finishedWorkersCount = new AtomicInteger(0)
     private val pendingTerminationPromises = new CopyOnWriteArrayList[Promise[CompletionResponse]]()
 
-    override def ReportCompletion(request: CompletionRequest): Future[CompletionResponse] = {
+    override def reportCompletion(request: WorkerInfo): Future[CompletionResponse] = {
         val myPromise = Promise[CompletionResponse]() 
 
         this.synchronized {
+            // TODO: 개수가 아닌 각 worker가 끝난건지 확인
             pendingTerminationPromises.add(myPromise)
 
             val currentFinished = finishedWorkersCount.incrementAndGet()
