@@ -5,6 +5,7 @@ import java.net.InetAddress
 import scala.concurrent.ExecutionContext
 import com.typesafe.config.ConfigFactory
 import scala.collection.mutable.ArrayBuffer
+import java.nio.file.{Path, Paths}
 import distributedsorting.distributedsorting._
 import distributedsorting.logic._
 
@@ -34,14 +35,17 @@ object Worker {
 class WorkerApp (
   ip: String,
   port: Int,
-  inputDirs: Seq[String],
-  outputDir: String
+  inputDirsStr: Seq[String],
+  outputDirStr: String
 ) extends MasterClient {     
   val config = ConfigFactory.load()
   val configPath = "distributedsorting"
   val workerIp: String = InetAddress.getLocalHost.getHostAddress
   // TODO: worker server 생성
   val workerPort = 1234 // 추후에 변경 workerServer.getPort()
+
+  val inputDirs: Seq[Path] = inputDirsStr.map(Paths.get(_))
+  val outputDir: Path = Paths.get(outputDirStr)
   
   implicit override val ec: ExecutionContext = ExecutionContext.global   
   override val masterIp = ip
@@ -50,8 +54,12 @@ class WorkerApp (
   override val KEY_SIZE = config.getInt(s"$configPath.record-info.key-length")
   override val RECORD_SIZE = config.getInt(s"$configPath.record-info.record-length")
 
+  var pivots: Vector[Record] = _
+
   def run(): Unit = {
     registerWorker()
+
+    pivots = executeSampling(inputDirs)
 
     // TODO
 
