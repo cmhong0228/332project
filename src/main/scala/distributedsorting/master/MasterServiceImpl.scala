@@ -10,14 +10,18 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import scala.jdk.CollectionConverters._
 import com.google.protobuf.ByteString
 
-class MasterServiceImpl(val numWorkers: Int)(implicit ec: ExecutionContext) extends MasterServiceGrpc.MasterService with SamplingPolicy with PivotSelector{
+// master를 종료 시키기 위한 trait
+trait ShutdownController {
+    def initiateShutdown(): Unit
+}
+
+class MasterServiceImpl(val numWorkers: Int, private val shutdownController: ShutdownController)(implicit ec: ExecutionContext) extends MasterServiceGrpc.MasterService with SamplingPolicy with PivotSelector{
     private val config = ConfigFactory.load()
     private val configPath = "distributedsorting"
 
     // ==================================
     // 상태 관리 변수 (Thread-Safe)
     // ==================================
-    case class WorkerState(info: WorkerInfo, status: String)
     private val workers = new CopyOnWriteArrayList[WorkerInfo]()
 
     private val connectedWorkersCount = new AtomicInteger(0)
@@ -56,6 +60,36 @@ class MasterServiceImpl(val numWorkers: Int)(implicit ec: ExecutionContext) exte
                 pendingRegisterPromises.clear()
             }
         }
+        myPromise.future
+    }
+
+    // ==================================
+    // termination
+    // ==================================
+    private val finishedWorkersCount = new AtomicInteger(0)
+    private val pendingTerminationPromises = new CopyOnWriteArrayList[Promise[CompletionResponse]]()
+
+    override def ReportCompletion(request: CompletionRequest): Future[CompletionResponse] = {
+        val myPromise = Promise[CompletionResponse]() 
+
+        this.synchronized {
+            pendingTerminationPromises.add(myPromise)
+
+            val currentFinished = finishedWorkersCount.incrementAndGet()
+            
+            if (currentFinished == numWorkers) {
+                val response = CompletionResponse(success = true)
+
+                pendingTerminationPromises.asScala.foreach { promise =>
+                    promise.success(response)
+                }
+
+                pendingTerminationPromises.clear()
+
+                shutdownController.initiateShutdown()
+            }
+        }
+        
         myPromise.future
     }
 

@@ -23,6 +23,11 @@ message WorkerInfo {
   int32 port = 3;       // 워커가 데이터를 받을 Port (나중에 Shuffle 단계에서 필요할 수 있음)
 }
 
+// termination: 종료 보고 
+message CompletionRequest {
+    string worker_id = 1;
+}
+
 // sampling: 데이터 수 통보를 위한 메시지
 message RecordCountReport {
     string worker_id = 1;      // 워커 ID (등록된 워커임을 확인)
@@ -43,6 +48,11 @@ message SampleKeyList {
 message RegisterResponse {
   bool success = 1;     // 등록 성공 여부
   repeated WorkerInfo worker_list = 2;
+}
+
+// termination: 종료 응답
+message CompletionResponse {
+    bool success = 1;
 }
 
 // sampling: 마스터가 워커에게 샘플링 비율을 보낼 때 사용
@@ -74,6 +84,9 @@ message SamplingControl {
 service MasterService {
     // 워커가 마스터에게 등록할 때 호출하는 함수
     rpc RegisterWorker (WorkerInfo) returns (RegisterResponse);
+
+    // 종료 보고
+    rpc ReportCompletion (CompletionRequest) return (CompletionResponse);
 
     // 샘플링 비율 결정 단계
     // 등록된 워커가 자신의 레코드 수를 보고하고, 마스터는 샘플링 비율을 응답
