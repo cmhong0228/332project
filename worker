@@ -2,7 +2,7 @@
 
 JAR_DIR=$(dirname "$0")
 JAR_FILE="$JAR_DIR/target/scala-2.13/distributedsorting.jar"
-COMMAND="worker"
+COMMAND="distributedsorting.worker.Worker"
 
 # 필수 인수가 있는지 확인
 # 마스터 주소, -I, 입력 디렉토리, -O, 출력 디렉토리는 필수
@@ -13,5 +13,5 @@ if [ "$#" -lt 5 ]; then
 fi
 
 # 모든 인수를 자바 명령으로 전달
-# 예: java -jar distributedsorting.jar worker 141.223.91.80:30040 -I /d1 /d2 -O /out
-java -jar "$JAR_FILE" "$COMMAND" "$@"
+# 예: java -cp target/scala-2.13/distributedsorting.jar distributedsorting.worker.Worker 141.223.91.80:30040 -I /d1 /d2 -O /out
+java -cp "$JAR_FILE" "$COMMAND" "$@"
