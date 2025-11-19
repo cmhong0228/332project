@@ -32,8 +32,6 @@ class MasterApp (numWorkers: Int) extends ShutdownController {
         
         println(s"$masterIp:$masterPort") 
         
-        // TODO
-        
         server.awaitTermination()
     }
 
