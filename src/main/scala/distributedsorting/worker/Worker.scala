@@ -4,6 +4,7 @@ import scopt.OptionParser
 import java.net.InetAddress
 import scala.concurrent.ExecutionContext
 import com.typesafe.config.ConfigFactory
+import scala.collection.mutable.ArrayBuffer
 import distributedsorting.distributedsorting._
 import distributedsorting.logic._
 
@@ -12,7 +13,7 @@ object Worker {
     val configPath = "distributedsorting"
 
     def main(args: Array[String]): Unit = {
-        WorkerArgsParser.parser.parse(args, WorkerConfig()) match {
+        WorkerArgsParser.parser.parse(ArgsUtils.normalizeInputDirectoriesArgs(args), WorkerConfig()) match {
             case Some(config) =>
                 val Array(masterIp, masterPortStr) = config.masterAddress.split(":")
                 val masterPort = masterPortStr.toInt
@@ -81,7 +82,9 @@ object WorkerArgsParser {
       .required()
       .valueName("<dir1> <dir2>...")
       .unbounded() // 인자가 무한정 올 수 있음을 명시
-      .action { (x, c) => c.copy(inputDirs = x) }
+      .action { (x, c) => 
+        c.copy(inputDirs = c.inputDirs ++ x.filter(_.nonEmpty)) 
+      }
       .text("Input directories containing unsorted input blocks.")
 
     // 3. 출력 디렉토리 옵션 (-O) 처리
@@ -92,5 +95,37 @@ object WorkerArgsParser {
       .text("Output directory to store sorted partition files.")
       
     help("help").text("prints this usage text")
+  }
+}
+
+object ArgsUtils {
+  def normalizeInputDirectoriesArgs(args: Array[String]): Array[String] = {
+    val newArgs = ArrayBuffer[String]()
+    var i = 0
+    
+    while (i < args.length) {
+      val arg = args(i)
+      // -I 또는 --input-directories 플래그를 만났을 때
+      if (arg == "-I" || arg == "--input-directories") {
+        newArgs += arg
+        i += 1
+        
+        // 다음 인자들이 옵션(-)이 아닐 동안 계속 수집해서 콤마로 합침
+        val dirs = ArrayBuffer[String]()
+        while (i < args.length && !args(i).startsWith("-")) {
+          dirs += args(i)
+          i += 1
+        }
+        // 수집한 경로들을 콤마로 묶어서 하나의 인자로 만듦
+        if (dirs.nonEmpty) {
+          newArgs += dirs.mkString(",") 
+        }
+      } else {
+        // 그 외의 인자(Master IP, -O 등)는 그대로 통과
+        newArgs += arg
+        i += 1
+      }
+    }
+    newArgs.toArray
   }
 }
