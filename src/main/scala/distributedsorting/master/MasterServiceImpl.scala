@@ -58,6 +58,9 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
                 }
                 
                 pendingRegisterPromises.clear()
+
+                val workerIps = allWorkersSeq.map(_.ip).mkString(", ")
+                println(workerIps)
             }
         }
         myPromise.future
