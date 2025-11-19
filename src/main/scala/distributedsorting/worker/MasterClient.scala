@@ -12,7 +12,8 @@ import java.util.concurrent.TimeUnit
 import scala.util.control.NonFatal
 import scala.util.{Try, Success, Failure}
 
-trait MasterClient { self: RecordCountCalculator with RecordExtractor => 
+//trait MasterClient { self: RecordCountCalculator with RecordExtractor => 
+trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampler {
     implicit val ec: ExecutionContext
     // Master와의 통신 스텁 및 Worker ID 정의
     val masterIp: String
@@ -73,9 +74,9 @@ trait MasterClient { self: RecordCountCalculator with RecordExtractor =>
     }
             
     // ======================= Termination =======================
-    def ReportCompletion(): Unit = {
+    def reportCompletion(): Unit = {
         val timeOut = Duration.Inf
-        val reportFuture: Future[CompletionResponse] = masterClient.reportCompletion()
+        val reportFuture: Future[CompletionResponse] = masterClient.reportCompletion(workerInfo)
     
         val result = Try(Await.result(reportFuture, timeOut)) 
 
@@ -112,8 +113,8 @@ trait MasterClient { self: RecordCountCalculator with RecordExtractor =>
         
         // --- 1단계: 레코드 수 보고 및 샘플링 비율 획득 ---
 
-        // 1. 로컬 레코드 수 계산 (self-type 능력 사용)
-        val localRecordCount = self.calculateTotalRecords(inputDirs)
+        // 1. 로컬 레코드 수 계산
+        val localRecordCount = calculateTotalRecords(inputDirs)
 
         // 2. gRPC 요청 생성
         val report = RecordCountReport(
@@ -131,8 +132,8 @@ trait MasterClient { self: RecordCountCalculator with RecordExtractor =>
 
         // --- 2단계: 샘플 전송 및 피벗 획득 ---
 
-        // 5. 획득한 비율로 로컬 샘플 추출 (self-type 능력 사용)
-        val localSamples: Seq[Key] = self.readAndExtractSamples(inputDirs, ratio)
+        // 5. 획득한 비율로 로컬 샘플 추출
+        val localSamples: Seq[Key] = readAndExtractSamples(inputDirs, ratio)
 
         // 6. Scala의 Key(Array[Byte])를 Protobuf의 KeyMessage(ByteString)로 변환
         val protoKeys: Seq[KeyMessage] = localSamples.map { keyArray =>
