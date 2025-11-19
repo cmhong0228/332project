@@ -1,7 +1,6 @@
-package distributedsorting
+package distributedsorting.worker
 
 import distributedsorting.distributedsorting._
-import distributedsorting.worker.{LocalFileTransport, LocalTransportRegistry}
 import scala.collection.concurrent.TrieMap
 
 /**

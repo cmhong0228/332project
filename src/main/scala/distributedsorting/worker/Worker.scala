@@ -3,6 +3,7 @@ package distributedsorting.worker
 import distributedsorting.distributedsorting._
 import java.nio.file.Path
 import scala.collection.mutable
+// import distributedsorting.TestHelpers._
 
 /**
  * 분산 정렬 시스템의 워커 노드
@@ -61,7 +62,6 @@ class Worker(
         
         val successCount = shuffleStrategy.execute(
             neededFiles,
-            fileStructure,
             shuffleOutputDir,
             fileTransport
         )

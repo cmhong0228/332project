@@ -2,7 +2,8 @@ package distributedsorting.logic
 
 import distributedsorting.distributedsorting._
 import distributedsorting.worker._
-import distributedsorting.TestHelpers._  // ← 테스트용 임시 타입들
+import distributedsorting.worker.TestHelpers._
+import distributedsorting.logic._
 import munit.FunSuite
 import java.nio.file.{Path, Files}
 import scala.concurrent.{Await, ExecutionContext, Future}

@@ -11,14 +11,12 @@ trait ShuffleStrategy {
      * needed_file 집합에 대해 shuffle을 수행
      *
      * @param neededFiles 가져와야 할 파일들
-     * @param fileStructure 파일 구조 정보
      * @param shuffleOutputDir shuffle 결과를 저장할 디렉토리
      * @param fileTransport 파일 전송 인터페이스
      * @return 성공적으로 가져온 파일 수
      */
     def execute(
         neededFiles: mutable.Set[FileId],
-        fileStructure: ???,
         shuffleOutputDir: Path,
         fileTransport: FileTransport
     ): Int
@@ -40,7 +38,6 @@ trait ShuffleStrategy {
 class SequentialShuffleStrategy extends ShuffleStrategy {
     override def execute(
         neededFiles: mutable.Set[FileId],
-        fileStructure: FileStructure,
         shuffleOutputDir: Path,
         fileTransport: FileTransport
     ): Int = {
@@ -67,7 +64,6 @@ class SequentialShuffleStrategy extends ShuffleStrategy {
 class LimitedConcurrencyShuffleStrategy extends ShuffleStrategy {
     override def execute(
         neededFiles: mutable.Set[FileId],
-        fileStructure: FileStructure,
         shuffleOutputDir: Path,
         fileTransport: FileTransport
     ): Int = {
