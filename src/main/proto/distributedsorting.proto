@@ -16,7 +16,7 @@ message KeyMessage {
 // 2. 워커 -> 마스터 메시지
 // =========================================================
 
-// Registration: 워커 등록 요청 메시지
+// worker 정보를 담는 메시지
 message WorkerInfo {
   string worker_id = 1; // 워커의 고유 ID 또는 IP:Port
   string ip = 2;        // 워커의 IP 주소
@@ -45,7 +45,7 @@ message RegisterResponse {
   repeated WorkerInfo worker_list = 2;
 }
 
-// termination: 종료 응답
+// termination & communication: 종료 응답 메시지
 message CompletionResponse {
     bool success = 1;
 }
@@ -82,6 +82,9 @@ service MasterService {
 
     // 종료 보고
     rpc ReportCompletion (WorkerInfo) returns (CompletionResponse);
+
+    // sort&partition 종료 보고
+    rpc ReportSortCompletion (WorkerInfo) returns (CompletionResponse);
 
     // 샘플링 비율 결정 단계
     // 등록된 워커가 자신의 레코드 수를 보고하고, 마스터는 샘플링 비율을 응답
