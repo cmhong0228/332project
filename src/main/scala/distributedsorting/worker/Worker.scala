@@ -1,8 +1,16 @@
 package distributedsorting.worker
 
 import scopt.OptionParser
+import java.net.InetAddress
+import scala.concurrent.ExecutionContext
+import com.typesafe.config.ConfigFactory
+import distributedsorting.distributedsorting._
+import distributedsorting.logic._
 
 object Worker {
+    val config = ConfigFactory.load()
+    val configPath = "distributedsorting"
+
     def main(args: Array[String]): Unit = {
         WorkerArgsParser.parser.parse(args, WorkerConfig()) match {
             case Some(config) =>
@@ -20,8 +28,32 @@ object Worker {
         }
     }
 
-    def workerApplication(masterIp: String, masterPort: Int, inputDirs: Seq[String], outputDir: String): Unit = {
+    def workerApplication(inputMasterIp: String, inputMasterPort: Int, inputDirs: Seq[String], outputDir: String): Unit = {    
+        implicit val executionContext: ExecutionContext = ExecutionContext.global    
+        val workerIp: String = InetAddress.getLocalHost.getHostAddress
+        
+        // 포트 번호 자동 설정
+        // worker server 생성
 
+        //val workerPort = server.getPort
+        val workerPort = 1234
+
+        val selfInfo = new WorkerInfo(workerId = s"$workerIp:$workerPort", ip = workerIp, port = workerPort)
+
+        val masterClient = new MasterClient {
+            override val masterIp = inputMasterIp
+            override val masterPort = inputMasterPort
+            override val workerInfo = selfInfo
+            override val KEY_SIZE = config.getInt(s"$configPath.record-info.key-length")
+            override val RECORD_SIZE = config.getInt(s"$configPath.record-info.record-length")
+            implicit override val ec: ExecutionContext = executionContext
+        }
+
+        masterClient.registerWorker()
+        
+        // TODO
+
+        masterClient.reportCompletion()
     }
 }
 
