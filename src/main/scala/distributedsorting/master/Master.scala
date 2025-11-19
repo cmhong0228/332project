@@ -6,29 +6,28 @@ import io.grpc.{Server, ServerBuilder}
 import scala.concurrent.ExecutionContext
 import distributedsorting.distributedsorting._
 
-object Master extends ShutdownController{
-    var server: Server = _
-
+object Master {
     def main(args: Array[String]): Unit = {        
         MasterArgsParser.parser.parse(args, MasterConfig()) match {
             case Some(config) if config.numWorkers > 0 =>
-                masterApplication(config.numWorkers)
+                val masterApp = new MasterApp(config.numWorkers)
+                masterApp.run()
             case _ => ()
         }
     }
+}
 
-    def masterApplication(numWorkers: Int): Unit = {
-        implicit val ec: ExecutionContext = ExecutionContext.global
-        val masterIp: String = InetAddress.getLocalHost.getHostAddress 
-        val masterService = new MasterServiceImpl(numWorkers, this)
-        
-        // 포트 번호 자동 설정
-        server = ServerBuilder.forPort(0)
+class MasterApp (numWorkers: Int) extends ShutdownController { 
+    implicit val ec: ExecutionContext = ExecutionContext.global
+    val masterIp: String = InetAddress.getLocalHost.getHostAddress 
+    val masterService = new MasterServiceImpl(numWorkers, this)
+
+    val server = ServerBuilder.forPort(0)
         .addService(MasterServiceGrpc.bindService(masterService, ec))
         .build()
 
-        server.start()
-
+    def run(): Unit = {
+        server.start()     
         val masterPort = server.getPort
         
         println(s"$masterIp:$masterPort") 
