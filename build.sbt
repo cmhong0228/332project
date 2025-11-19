@@ -23,7 +23,8 @@ lazy val root = (project in file("."))
     assembly / assemblyJarName := "distributedsorting.jar" ,
 
     assembly / assemblyMergeStrategy := {
-      case PathList("META-INF", _*) => MergeStrategy.discard
-      case _ => MergeStrategy.first
+      case PathList("META-INF", "services", xs @ _*) => MergeStrategy.concat
+      case PathList("META-INF", xs @ _*)             => MergeStrategy.discard
+      case x => MergeStrategy.first
     }
   )
