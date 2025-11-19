@@ -3,19 +3,74 @@ package distributedsorting.worker
 import distributedsorting.distributedsorting._
 import distributedsorting.logic._
 import java.nio.file.Path
-import io.grpc.ManagedChannel
+import io.grpc.{ManagedChannel, ManagedChannelBuilder}
 import distributedsorting.distributedsorting.MasterServiceGrpc.MasterServiceStub
 import com.google.protobuf.ByteString
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import java.util.concurrent.TimeUnit
+import scala.util.control.NonFatal
+import scala.util.{Try, Success, Failure}
 
 trait MasterClient { self: RecordCountCalculator with RecordExtractor => 
+    implicit val ec: ExecutionContext
     // Master와의 통신 스텁 및 Worker ID 정의
-    val masterClient: MasterServiceStub
-    val workerId: String
+    val masterIp: String
+    val masterPort: Int
+    val workerInfo: WorkerInfo
+    private lazy val channel: ManagedChannel = ManagedChannelBuilder.forAddress(masterIp, masterPort)
+      .usePlaintext()
+      .build()
+    private lazy val masterClient: MasterServiceStub = MasterServiceGrpc.stub(channel)
 
-    implicit val ec: ExecutionContext = ExecutionContext.global
+    /** 채널 종료 함수 */
+    def shutdown(): Unit = {
+        channel.shutdownNow()
+    }
+
+    //
+    private var _allWorkers: Seq[WorkerInfo] = Seq.empty[WorkerInfo]
+
+    def getAllWorkers: Seq[WorkerInfo] = this.synchronized { _allWorkers }
+
+    // ======================= Registration =======================
+    def registerWorker(): Unit = {
+        def attemptCall(): Future[RegisterResponse] = {
+            try {
+                masterClient.registerWorker(workerInfo) 
+            } catch {
+                case NonFatal(e) => 
+                    Future.failed(e)
+            }
+        }
+
+        var success = false
+        var timeOut = Duration.Inf
+    
+        while (!success) {
+            val result = Try(Await.result(attemptCall(), timeOut)) // TODO: 대기시간 설정
+
+            result match {
+                case Success(response) =>
+                    if (response.success) {
+                        this.synchronized {
+                            _allWorkers = response.workerList
+                        }
+                        success = true
+                    } else {
+                        // TODO: 예외처리
+                    }
+
+                case Failure(e) => {
+                    // TODO: 예외처리
+                }
+            }
+
+            if (!success) {
+                Thread.sleep(100)
+            }
+        }
+    }
             
     // ======================= Sampling =======================
     /*
@@ -42,7 +97,7 @@ trait MasterClient { self: RecordCountCalculator with RecordExtractor =>
 
         // 2. gRPC 요청 생성
         val report = RecordCountReport(
-            workerId = workerId,
+            workerId = workerInfo.workerId,
             totalRecordCount = localRecordCount
         )
 
@@ -66,7 +121,7 @@ trait MasterClient { self: RecordCountCalculator with RecordExtractor =>
 
         // 7. gRPC 요청 생성
         val sampleList = SampleKeyList(
-            workerId = workerId,
+            workerId = workerInfo.workerId,
             keys = protoKeys
         )
 
