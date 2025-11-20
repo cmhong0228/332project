@@ -19,4 +19,8 @@ class RemoteFileTransport extends FileTransport {
         // TODO: workerservice 호출
         false
     }
+
+    override def close(): Any = {
+        ???
+    }
 }

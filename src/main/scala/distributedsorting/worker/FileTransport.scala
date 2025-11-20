@@ -10,5 +10,6 @@ import java.nio.file.Path
 trait FileTransport {
     def init(): Unit
     def requestFile(fileId: FileId, destPath: Path): Boolean
-    def serveFile(fileId: FileId): Boolean
+    def serveFile(fileId: FileId): Any
+    def close(): Any
 }

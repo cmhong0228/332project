@@ -1,7 +1,7 @@
 package distributedsorting.worker
 
 import distributedsorting.distributedsorting._
-import java.nio.file.{Files, Path, StandardCopyOption}
+import java.nio.file.{Files, Path, StandardCopyOption, CopyOption}
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
@@ -75,31 +75,34 @@ class LocalFileTransport(
         serviceThread = Some(thread)
     }
 
-    override def requestFile(fileId: FileId, destPath: Path): Future[Try[Long]] = {
+     override def requestFile(fileId: FileId, destPath: Path): Boolean = {
+        import scala.concurrent.Await
+        import scala.concurrent.duration._
         println(s"[Worker $workerId] Requesting file from Worker ${fileId.sourceWorkerId} " +
             s"(thread: ${Thread.currentThread().getName})")
     
-        // 자기 자신에게 요청하는 경우: Service thread 거치지 않고 직접 처리
-        if (fileId.sourceWorkerId == workerId) {
+        // 내부적으로 비동기 처리 후 결과를 블로킹하여 Boolean으로 변환
+        val resultFuture: Future[Try[Unit]] = if (fileId.sourceWorkerId == workerId) {
+            // 자기 자신에게 요청하는 경우: Service thread 거치지 않고 직접 처리
             println(s"[Worker $workerId] Self-request detected, copying directly")
             serveFile(fileId) match {
                 case Some(sourcePath) =>
                     Future {
                         try {
-                            val bytes: Long = Files.copy(
+                            Files.copy(
                                 sourcePath,
                                 destPath,
                                 StandardCopyOption.REPLACE_EXISTING
                             )
-                            Success(bytes): Try[Long]
+                            Success(()): Try[Unit]
                         } catch {
-                            case e: Exception => Failure(e): Try[Long]
+                            case e: Exception => Failure(e): Try[Unit]
                         }
                     }
                 case None =>
                     Future.successful(Failure(
                         new RuntimeException(s"File not found: ${fileId.toFileName}")
-                    ): Try[Long])
+                    ): Try[Unit])
             }
         } else {
             // 다른 워커에게 요청하는 경우: Service thread 통해서 처리
@@ -115,27 +118,37 @@ class LocalFileTransport(
                         pathOpt match {
                             case Some(sourcePath) =>
                                 try {
-                                    val bytes: Long = Files.copy(
+                                    Files.copy(
                                         sourcePath,
                                         destPath,
                                         StandardCopyOption.REPLACE_EXISTING
                                     )
-                                    Success(bytes): Try[Long]
+                                    Success(()): Try[Unit]
                                 } catch {
-                                    case e: Exception => Failure(e): Try[Long]
+                                    case e: Exception => Failure(e): Try[Unit]
                                 }
                             case None =>
-                                Failure(new RuntimeException(s"File not found: ${fileId.toFileName}")): Try[Long]
+                                Failure(new RuntimeException(s"File not found: ${fileId.toFileName}")): Try[Unit]
                         }
                     }.recover {
-                        case e: Exception => Failure(e): Try[Long]
+                        case e: Exception => Failure(e): Try[Unit]
                     }
                     
                 case None =>
                     Future.successful(Failure(
                         new RuntimeException(s"Worker ${fileId.sourceWorkerId} not found in registry")
-                    ): Try[Long])
+                    ): Try[Unit])
             }
+        }
+
+        // Future를 블로킹하여 Boolean으로 변환
+        try {
+            val result = Await.result(resultFuture, 30.seconds)
+            result.isSuccess
+        } catch {
+            case e: Exception =>
+                println(s"[Worker $workerId] Error requesting file ${fileId.toFileName}: ${e.getMessage}")
+                false
         }
     }
     

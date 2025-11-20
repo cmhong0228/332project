@@ -34,7 +34,8 @@ class Worker(
      * 워커 종료 (리소스 정리)
      */
     def shutdown(): Unit = {
-        // TODO: 리소스 정리 작업
+         fileTransport.close()
+        // TODO: 기타 리소스 정리 작업
     }
 
     /**
