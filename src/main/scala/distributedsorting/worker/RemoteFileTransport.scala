@@ -41,7 +41,7 @@ class RemoteFileTransport(
     }
 
     /**
-     * 다른 워커로부터 파일 요청
+     * 다른 워커로부터 파일 요청 (streaming 방식)
      *
      * @param fileId 요청할 파일 ID
      * @param destPath 저장할 경로
@@ -53,11 +53,11 @@ class RemoteFileTransport(
         shuffleClient match {
             case Some(client) =>
                 try {
-                    // gRPC를 통해 파일 데이터 요청
-                    val dataFuture = client.requestFile(fileId)
+                    // gRPC streaming을 통해 파일 데이터 요청
+                    val dataFuture = client.requestFileStream(fileId)
 
-                    // Future를 블로킹하여 결과 대기 (최대 30초)
-                    val data = Await.result(dataFuture, 30.seconds)
+                    // Future를 블로킹하여 결과 대기 (최대 60초 - streaming은 더 오래 걸릴 수 있음)
+                    val data = Await.result(dataFuture, 60.seconds)
 
                     // 파일 저장
                     Files.createDirectories(destPath.getParent)
@@ -68,6 +68,7 @@ class RemoteFileTransport(
                 } catch {
                     case e: Exception =>
                         println(s"[RemoteFileTransport $workerId] Failed to request ${fileId.toFileName}: ${e.getMessage}")
+                        e.printStackTrace()
                         false
                 }
 

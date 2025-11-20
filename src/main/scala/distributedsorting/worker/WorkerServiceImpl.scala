@@ -1,9 +1,11 @@
 package distributedsorting.worker
 
 import distributedsorting.distributedsorting._
-import distributedsorting.distributedsorting.{WorkerServiceGrpc, IntermediateFileRequest, IntermediateFileResponse}
+import distributedsorting.distributedsorting.{WorkerServiceGrpc, IntermediateFileRequest, IntermediateFileResponse, FileChunk}
 import io.grpc.{Server, ServerBuilder}
+import io.grpc.stub.StreamObserver
 import java.nio.file.{Files, Path}
+import java.io.{FileInputStream, BufferedInputStream}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Try, Success, Failure}
 
@@ -43,7 +45,7 @@ class WorkerServiceImpl(
     }
 
     /**
-     * GetIntermediateFile RPC 구현
+     * GetIntermediateFile RPC 구현 (작은 파일용)
      * proto: rpc GetIntermediateFile (IntermediateFileRequest) returns (IntermediateFileResponse)
      */
     override def getIntermediateFile(request: IntermediateFileRequest): Future[IntermediateFileResponse] = {
@@ -74,6 +76,88 @@ class WorkerServiceImpl(
                         success = false,
                         errorMsg = ex.getMessage
                     )
+            }
+        }
+    }
+
+    /**
+     * GetIntermediateFileStream RPC 구현 (대용량 파일용, streaming)
+     * proto: rpc GetIntermediateFileStream (IntermediateFileRequest) returns (stream FileChunk)
+     */
+    override def getIntermediateFileStream(
+        request: IntermediateFileRequest,
+        responseObserver: StreamObserver[FileChunk]
+    ): Unit = {
+        val fileId = FileId(request.i, request.j, request.k)
+        val filePath = partitionDir.resolve(fileId.toFileName)
+
+        println(s"[WorkerService $workerId] Streaming file: ${fileId.toFileName}")
+
+        Future {
+            Try {
+                if (!Files.exists(filePath)) {
+                    throw new RuntimeException(s"File not found: ${fileId.toFileName}")
+                }
+
+                val fileSize = Files.size(filePath)
+                val chunkSize = 1024 * 1024 // 1MB chunks
+                val buffer = new Array[Byte](chunkSize)
+
+                var inputStream: FileInputStream = null
+                var bufferedStream: BufferedInputStream = null
+
+                try {
+                    inputStream = new FileInputStream(filePath.toFile)
+                    bufferedStream = new BufferedInputStream(inputStream)
+
+                    var chunkIndex = 0L
+                    var bytesRead = 0
+                    var totalBytesRead = 0L
+
+                    // 파일을 청크로 나누어 전송
+                    while ({ bytesRead = bufferedStream.read(buffer); bytesRead != -1 }) {
+                        totalBytesRead += bytesRead
+
+                        val isLast = totalBytesRead >= fileSize
+                        val chunkData = if (bytesRead < buffer.length) {
+                            buffer.take(bytesRead)
+                        } else {
+                            buffer
+                        }
+
+                        val chunk = FileChunk(
+                            data = com.google.protobuf.ByteString.copyFrom(chunkData),
+                            chunkIndex = chunkIndex,
+                            totalSize = if (chunkIndex == 0) fileSize else 0,
+                            isLast = isLast,
+                            errorMsg = ""
+                        )
+
+                        responseObserver.onNext(chunk)
+                        chunkIndex += 1
+                    }
+
+                    println(s"[WorkerService $workerId] Streamed ${fileId.toFileName}: $chunkIndex chunks, $totalBytesRead bytes")
+                    responseObserver.onCompleted()
+
+                } finally {
+                    if (bufferedStream != null) bufferedStream.close()
+                    if (inputStream != null) inputStream.close()
+                }
+
+            } match {
+                case Success(_) => // Already handled
+                case Failure(ex) =>
+                    println(s"[WorkerService $workerId] Error streaming ${fileId.toFileName}: ${ex.getMessage}")
+                    val errorChunk = FileChunk(
+                        data = com.google.protobuf.ByteString.EMPTY,
+                        chunkIndex = 0,
+                        totalSize = 0,
+                        isLast = true,
+                        errorMsg = ex.getMessage
+                    )
+                    responseObserver.onNext(errorChunk)
+                    responseObserver.onError(new RuntimeException(ex.getMessage))
             }
         }
     }
