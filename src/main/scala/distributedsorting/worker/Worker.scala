@@ -3,6 +3,7 @@ package distributedsorting.worker
 import distributedsorting.distributedsorting._
 import java.nio.file.Path
 import scala.collection.mutable
+// import distributedsorting.TestHelpers._
 
 /**
  * 분산 정렬 시스템의 워커 노드
@@ -33,7 +34,8 @@ class Worker(
      * 워커 종료 (리소스 정리)
      */
     def shutdown(): Unit = {
-        // TODO: 리소스 정리 작업
+         fileTransport.close()
+        // TODO: 기타 리소스 정리 작업
     }
 
     /**
@@ -61,7 +63,6 @@ class Worker(
         
         val successCount = shuffleStrategy.execute(
             neededFiles,
-            fileStructure,
             shuffleOutputDir,
             fileTransport
         )

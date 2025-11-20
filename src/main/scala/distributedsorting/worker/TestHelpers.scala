@@ -1,7 +1,6 @@
-package distributedsorting
+package distributedsorting.worker
 
 import distributedsorting.distributedsorting._
-import distributedsorting.worker.{LocalFileTransport, LocalTransportRegistry}
 import scala.collection.concurrent.TrieMap
 
 /**
@@ -78,6 +77,13 @@ object TestHelpers {
          */
         override def get(workerId: Int): Option[LocalFileTransport] = {
             workers.get(workerId)
+        }
+         /**
+         * 워커 등록 해제
+         */
+        override def unregisterWorker(workerId: Int): Unit = {
+            workers.remove(workerId)
+            println(s"[TestRegistry] Worker $workerId unregistered")
         }
         
         /**
