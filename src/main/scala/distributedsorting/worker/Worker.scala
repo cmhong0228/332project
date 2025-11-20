@@ -76,7 +76,6 @@ class WorkerApp (
     pivots = executeSampling(inputDirs)
 
     // TODO: Sort&Partition
-    println("sort")
 
     reportSortCompletion()
 
@@ -84,10 +83,8 @@ class WorkerApp (
 
     // TODO: Merge
     // executeExternalSort()
-    println("merge")
 
     reportCompletion()
-    println("ex")
   }
 }
 

@@ -91,7 +91,6 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
 
                 pendingTerminationPromises.clear()
 
-                //shutdownController.initiateShutdown()
                 shutdownController.signalShutdown()
             }
         }

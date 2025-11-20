@@ -14,6 +14,7 @@ object Master {
             case Some(config) if config.numWorkers > 0 =>
                 val masterApp = new MasterApp(config.numWorkers)
                 masterApp.run()
+                masterApp.blockUntilShutdown()
             case _ => ()
         }
     }
@@ -35,50 +36,28 @@ class MasterApp (numWorkers: Int) extends ShutdownController {
         val masterPort = server.getPort
         
         println(s"$masterIp:$masterPort") 
-        
-        //server.awaitTermination()
-        blockUntilShutdown()
     }
 
     def initiateShutdown(): Unit = {
         if (server != null) {
-            println("Shutting down the server...")
             server.shutdown()
         }
     }
 
     def blockUntilShutdown(): Unit = {
-        // gRPC 자체 대기(awaitTermination)가 아니라, 
-        // 우리가 만든 'shutdownSignal'이 켜질 때까지 무한 대기합니다.
-        println("Master is running... Waiting for completion signal.")
         Await.result(shutdownSignal.future, Duration.Inf)
         
-        // 3. 대기가 풀리면(신호가 오면) 여기서부터 종료 절차 시작
         stop()
     }
 
-    // 4. 실제 종료 로직 (메인 스레드에서 실행됨)
     private def stop(): Unit = {
         if (server != null) {
-            println("Signal received. shutting down gRPC server...")
-            server.shutdown() // 우아한 종료 요청
-            
-            // 기존 작업(응답 전송)이 다 끝날 때까지 최대 10초 기다려줌
-            // 응답이 전송되면 10초 안 채우고 즉시 리턴됨
-            if (!server.awaitTermination(10, TimeUnit.SECONDS)) {
-                server.shutdownNow()
-            }
-            println("Master Stopped.")
+            server.shutdownNow()
         }
-        // 프로세스 종료
         System.exit(0)
     }
 
-    // 5. ShutdownController 구현 (ServiceImpl에서 호출함)
     override def signalShutdown(): Unit = {
-        println("Completion signal received from Worker.")
-        // Promise를 성공시켜서 blockUntilShutdown()의 대기를 풉니다.
-        // trySuccess를 써서 여러 번 호출되어도 에러 안 나게 함
         shutdownSignal.trySuccess(())
     }
 }
