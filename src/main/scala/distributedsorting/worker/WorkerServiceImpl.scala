@@ -15,8 +15,7 @@ import scala.util.{Try, Success, Failure}
  */
 class WorkerServiceImpl(
     val workerId: Int,
-    val partitionDir: Path,
-    val port: Int
+    val partitionDir: Path
 )(implicit ec: ExecutionContext) extends WorkerServiceGrpc.WorkerService {
 
     private var server: Option[Server] = None
@@ -26,11 +25,11 @@ class WorkerServiceImpl(
      */
     def start(): Unit = {
         val serverBuilder = ServerBuilder
-            .forPort(port)
+            .forPort(0)
             .addService(WorkerServiceGrpc.bindService(this, ec))
 
         server = Some(serverBuilder.build().start())
-        println(s"[WorkerService $workerId] Started on port $port")
+        println(s"[WorkerService $workerId] Started on port ??? ")
     }
 
     /**
@@ -164,7 +163,7 @@ class WorkerServiceImpl(
 }
 
 object WorkerServiceImpl {
-    def apply(workerId: Int, partitionDir: Path, port: Int)(implicit ec: ExecutionContext): WorkerServiceImpl = {
-        new WorkerServiceImpl(workerId, partitionDir, port)
+    def apply(workerId: Int, partitionDir: Path)(implicit ec: ExecutionContext): WorkerServiceImpl = {
+        new WorkerServiceImpl(workerId, partitionDir)
     }
 }

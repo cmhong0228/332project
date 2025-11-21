@@ -11,13 +11,11 @@ import scala.util.{Try, Success, Failure}
  *
  * @param workerId 이 워커의 ID
  * @param partitionDir 이 워커의 파티션 디렉토리 (파일 제공용)
- * @param port 이 워커의 gRPC 서버 포트
  * @param workerAddresses 다른 워커들의 주소 (workerId -> "host:port")
  */
 class RemoteFileTransport(
     val workerId: Int,
     val partitionDir: Path,
-    val port: Int,
     val workerAddresses: Map[Int, String]
 )(implicit ec: ExecutionContext) extends FileTransport {
 
@@ -28,16 +26,16 @@ class RemoteFileTransport(
      * gRPC 서버와 클라이언트 초기화
      */
     override def init(): Unit = {
-        // gRPC 서버 시작 (다른 워커로부터 파일 요청 받기)
-        val service = WorkerServiceImpl(workerId, partitionDir, port)
-        service.start()
-        workerService = Some(service)
+        // // gRPC 서버 시작 (다른 워커로부터 파일 요청 받기)
+        // val service = WorkerServiceImpl(workerId, partitionDir, port)
+        // service.start()
+        // workerService = Some(service)
 
         // gRPC 클라이언트 초기화 (다른 워커에게 파일 요청)
         val client = ShuffleClient(workerAddresses)
         shuffleClient = Some(client)
 
-        println(s"[RemoteFileTransport $workerId] Initialized (port: $port)")
+        // println(s"[RemoteFileTransport $workerId] Initialized (port: $port)")
     }
 
     /**
@@ -134,9 +132,8 @@ object RemoteFileTransport {
     def apply(
         workerId: Int,
         partitionDir: Path,
-        port: Int,
         workerAddresses: Map[Int, String]
     )(implicit ec: ExecutionContext): RemoteFileTransport = {
-        new RemoteFileTransport(workerId, partitionDir, port, workerAddresses)
+        new RemoteFileTransport(workerId, partitionDir, workerAddresses)
     }
 }
