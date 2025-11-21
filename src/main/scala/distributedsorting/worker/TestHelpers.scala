@@ -111,7 +111,7 @@ object TestHelpers {
     // =========================================================================
     
     /**
-     * 테스트용 FileStructure 생성
+     * 테스트용 FileStructure 생성 (단일 index)
      * 
      * 각 워커가 모든 파티션에 대해 하나의 파일을 생성했다고 가정
      * 예: Worker 0 → file_0_0_0.dat, file_0_1_0.dat, file_0_2_0.dat, ...
@@ -122,6 +122,29 @@ object TestHelpers {
             val files = (0 until numWorkers).map { sourceWorkerId =>
                 FileId(sourceWorkerId, partitionId, 0)
             }
+            partitionId -> files
+        }.toMap
+        
+        FileStructure(partitionToFiles)
+    }
+    
+    /**
+     * 테스트용 FileStructure 생성 (다중 index)
+     * 
+     * 각 워커가 모든 파티션에 대해 여러 개의 파일을 생성했다고 가정
+     * 예: Worker 0 → file_0_0_0.dat, file_0_0_1.dat, file_0_0_2.dat, ...
+     * 
+     * @param numWorkers 워커 개수
+     * @param filesPerPartition 각 (source, partition) 쌍당 파일 개수
+     */
+    def createTestFileStructureMultiIndex(numWorkers: Int, filesPerPartition: Int): FileStructure = {
+        val partitionToFiles = (0 until numWorkers).map { partitionId =>
+            // 파티션 X는 모든 워커의 file_*_X_*.dat 필요
+            val files = for {
+                sourceWorkerId <- 0 until numWorkers
+                fileIndex <- 0 until filesPerPartition
+            } yield FileId(sourceWorkerId, partitionId, fileIndex)
+            
             partitionId -> files
         }.toMap
         

@@ -146,7 +146,9 @@ object CoordinatorApp extends App {
   def verifyResults(baseDir: Path, numWorkers: Int): Unit = {
     val RECORDS_PER_FILE = 1000
     val RECORD_SIZE = 100
+    val FILES_PER_PARTITION = 3  // WorkerApp과 동일하게 설정
     val expectedSize = RECORDS_PER_FILE * RECORD_SIZE
+    val expectedFilesPerWorker = numWorkers * FILES_PER_PARTITION  // 각 워커가 받아야 할 총 파일 수
     
     var allPassed = true
     
@@ -164,32 +166,40 @@ object CoordinatorApp extends App {
       }
       
       val fileCount = Files.list(shuffleDir).count()
-      if (fileCount != numWorkers) {
-        println(s"[Worker $workerId] ✗ Expected $numWorkers files, found $fileCount")
+      if (fileCount != expectedFilesPerWorker) {
+        println(s"[Worker $workerId] ✗ Expected $expectedFilesPerWorker files, found $fileCount")
         allPassed = false
       } else {
         // 파일 크기 검증
         var fileSizeOk = true
+        var verifiedCount = 0
+        
+        // 각 source worker로부터
         (0 until numWorkers).foreach { sourceWorkerId =>
-          val fileName = s"file_${sourceWorkerId}_${workerId}_0.dat"
-          val filePath = shuffleDir.resolve(fileName)
-          
-          if (!Files.exists(filePath)) {
-            println(s"[Worker $workerId] ✗ Missing file $fileName")
-            allPassed = false
-            fileSizeOk = false
-          } else {
-            val actualSize = Files.size(filePath)
-            if (actualSize != expectedSize) {
-              println(s"[Worker $workerId] ✗ File $fileName size mismatch: expected $expectedSize, got $actualSize")
+          // 각 index 파일에 대해
+          (0 until FILES_PER_PARTITION).foreach { fileIndex =>
+            val fileName = s"file_${sourceWorkerId}_${workerId}_${fileIndex}.dat"
+            val filePath = shuffleDir.resolve(fileName)
+            
+            if (!Files.exists(filePath)) {
+              println(s"[Worker $workerId] ✗ Missing file $fileName")
               allPassed = false
               fileSizeOk = false
+            } else {
+              val actualSize = Files.size(filePath)
+              if (actualSize != expectedSize) {
+                println(s"[Worker $workerId] ✗ File $fileName size mismatch: expected $expectedSize, got $actualSize")
+                allPassed = false
+                fileSizeOk = false
+              } else {
+                verifiedCount += 1
+              }
             }
           }
         }
         
         if (fileSizeOk) {
-          println(s"[Worker $workerId] ✓ All $fileCount files verified (${expectedSize} bytes each)")
+          println(s"[Worker $workerId] ✓ All $verifiedCount files verified (${expectedSize} bytes each)")
         }
       }
     }
@@ -197,9 +207,14 @@ object CoordinatorApp extends App {
     println("-" * 60)
     
     if (allPassed) {
+      val totalFiles = numWorkers * numWorkers * FILES_PER_PARTITION
+      val totalDataKB = totalFiles * expectedSize / 1024
+      val totalDataMB = totalDataKB / 1024.0
+      
       println(s"\n🎉 SUCCESS: All verifications passed! 🎉")
-      println(s"Total files transferred: ${numWorkers * numWorkers}")
-      println(s"Total data transferred: ${numWorkers * numWorkers * expectedSize / 1024} KB")
+      println(s"Files per partition: $FILES_PER_PARTITION")
+      println(s"Total files transferred: $totalFiles")
+      println(s"Total data transferred: $totalDataKB KB (${totalDataMB} MB)")
     } else {
       println(s"\n❌ FAILURE: Some verifications failed!")
     }

@@ -27,6 +27,7 @@ object WorkerApp extends App {
   
   val RECORDS_PER_FILE = 1000
   val RECORD_SIZE = 100
+  val FILES_PER_PARTITION = 3  // 각 파티션당 생성할 파일 개수
   
   println(s"=" * 60)
   println(s"Starting Worker $workerId")
@@ -123,9 +124,10 @@ object WorkerApp extends App {
   // ============================================
   // 6. Shuffle Phase 실행
   // ============================================
-  val fileStructure = createTestFileStructure(numWorkers)
+  val fileStructure = createTestFileStructureMultiIndex(numWorkers, FILES_PER_PARTITION)
   
   println(s"[Worker $workerId] Starting shuffle phase...")
+  println(s"[Worker $workerId] Expected files: ${numWorkers * FILES_PER_PARTITION}")
   
   val result: ShuffleResult = worker.shufflePhase(
     partitionId = workerId,
@@ -158,19 +160,30 @@ object WorkerApp extends App {
   /**
    * 이 Worker가 생성해야 할 파티션 파일들 생성
    * (Map Phase 시뮬레이션)
+   * 각 타겟 파티션에 대해 여러 개의 index 파일 생성
    */
   def createMyPartitionFiles(partitionDir: Path, myWorkerId: Int, numWorkers: Int): Unit = {
-    // 각 타겟 파티션에 대한 파일 생성
+    println(s"[Worker $myWorkerId] Creating ${FILES_PER_PARTITION} files per partition...")
+    
+    // 각 타겟 파티션에 대해
     (0 until numWorkers).foreach { targetPartition =>
-      val fileId = FileId(myWorkerId, targetPartition, 0)
-      val filePath = partitionDir.resolve(fileId.toFileName)
-      
-      // 더미 데이터 생성 (실제로는 Map 결과)
-      val data = new Array[Byte](RECORDS_PER_FILE * RECORD_SIZE)
-      scala.util.Random.nextBytes(data)
-      Files.write(filePath, data)
-      
-      println(s"[Worker $myWorkerId] Created partition file: ${fileId.toFileName} (${data.length} bytes)")
+      // 여러 개의 index 파일 생성
+      (0 until FILES_PER_PARTITION).foreach { fileIndex =>
+        val fileId = FileId(myWorkerId, targetPartition, fileIndex)
+        val filePath = partitionDir.resolve(fileId.toFileName)
+        
+        // 더미 데이터 생성 (실제로는 Map 결과)
+        // 각 파일마다 다른 데이터 (fileIndex를 seed로 사용)
+        val data = new Array[Byte](RECORDS_PER_FILE * RECORD_SIZE)
+        val random = new scala.util.Random(myWorkerId * 1000 + targetPartition * 10 + fileIndex)
+        random.nextBytes(data)
+        Files.write(filePath, data)
+        
+        println(s"[Worker $myWorkerId] Created: ${fileId.toFileName} (${data.length} bytes)")
+      }
     }
+    
+    val totalFiles = numWorkers * FILES_PER_PARTITION
+    println(s"[Worker $myWorkerId] ✓ Created $totalFiles partition files total")
   }
 }
