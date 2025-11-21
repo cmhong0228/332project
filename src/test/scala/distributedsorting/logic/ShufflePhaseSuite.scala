@@ -47,7 +47,7 @@ class ShufflePhaseTest extends FunSuite {
         }
     }
 
-    test("Shuffle phase: Workers exchange partition files") {
+    test("Shuffle phase: Workers exchange partition files (Local)") {
         val testDir = Files.createTempDirectory("shuffle-test")
         try {
             // ============================================
@@ -56,61 +56,64 @@ class ShufflePhaseTest extends FunSuite {
             setupPartitionFiles(testDir)
 
             // ============================================
-            // 2. WorkerRegistry 생성 (공유 객체) - TestHelpers 사용
+            // 2. WorkerRegistry 생성 (공유 객체)
             // ============================================
-            val registry = WorkerRegistry()  // TestHelpers.WorkerRegistry
+            val registry = WorkerRegistry()
 
             // ============================================
-            // 3. Worker 생성 및 시작
+            // 3. Worker 생성
             // ============================================
             val workers = (0 until NUM_WORKERS).map { workerId =>
                 val workerDir = testDir.resolve(s"worker_$workerId")
                 Files.createDirectories(workerDir.resolve("shuffle_output"))
                 
-                // LocalFileTransport 생성
-                val transport = new LocalFileTransport(
-                    workerId = workerId,
-                    sharedDirectory = testDir,
-                    registry = registry
-                )
-                
-                // ShuffleStrategy 생성
-                val strategy = new SequentialShuffleStrategy()
-                
-                // Worker 생성
-                val worker = new Worker(
+                val worker = Worker.createLocal(
                     workerId = workerId,
                     numWorkers = NUM_WORKERS,
                     workingDir = workerDir,
-                    inputDirs = Seq.empty,  // 셔플 테스트에서는 불필요
-                    fileTransport = transport,
-                    shuffleStrategy = strategy
+                    inputDirs = Seq.empty
                 )
                 
-                // Worker 시작 (Service Thread 시작)
-                worker.start()
-
                 worker
             }
-            
-            println(s"\n[Test] All ${NUM_WORKERS} workers started")
 
             // ============================================
-            // 4. FileStructure 생성 (Map O/D) - TestHelpers 사용
+            // 4. Worker 시작 (gRPC 서버 시작) - Local에서는 생략 가능
+            // ============================================
+            workers.foreach { worker =>
+                val partitionDir = testDir.resolve(s"worker_${worker.workerId}").resolve("partitions")
+                // Local 테스트에서는 포트가 필요 없지만, 일관성을 위해 호출
+                // worker.start(partitionDir)
+            }
+            
+            println(s"\n[Test] All ${NUM_WORKERS} workers created")
+
+            // ============================================
+            // 5. Shuffle Phase 준비 (Local)
+            // ============================================
+            workers.foreach { worker =>
+                val partitionDir = testDir.resolve(s"worker_${worker.workerId}").resolve("partitions")
+                worker.prepareShufflePhase(
+                    useRemote = false,
+                    partitionDir = partitionDir,
+                    registry = Some(registry)
+                )
+            }
+
+            // ============================================
+            // 6. FileStructure 생성
             // ============================================
             val fileStructure = createTestFileStructure(NUM_WORKERS)
             
             println(s"[Test] FileStructure created: ${fileStructure.allFiles.size} files")
 
             // ============================================
-            // 5. 각 워커가 shufflePhase 실행 (병렬)
+            // 7. 각 워커가 shufflePhase 실행 (병렬)
             // ============================================
-            // Future 병렬실행으로 내부적으로 각 워커객체는 서로 다른 thread에서 실행됨
             val shuffleFutures = workers.zipWithIndex.map { case (worker, myPartitionId) =>
                 Future {
                     println(s"[Worker ${worker.workerId}] Shuffling partition $myPartitionId")
                     
-                    // 제네릭 shufflePhase 호출
                     val result: ShuffleResult = worker.shufflePhase(
                         partitionId = myPartitionId,
                         fileStructure = fileStructure,
@@ -129,26 +132,23 @@ class ShufflePhaseTest extends FunSuite {
             val results = Await.result(Future.sequence(shuffleFutures), 2.minutes)
 
             // ============================================
-            // 6. 검증
+            // 8. 검증
             // ============================================
             println(s"\n[Test] Verifying results...")
             
             results.foreach { case (workerId, result) =>
-                // 성공 개수 확인
                 assertEquals(
                     result.successCount, 
                     NUM_WORKERS,
                     s"Worker $workerId should download $NUM_WORKERS files"
                 )
                 
-                // 실패 없음
                 assertEquals(
                     result.failureCount,
                     0,
                     s"Worker $workerId should have no failures"
                 )
                 
-                // 실제 파일 확인
                 val shuffleDir = testDir.resolve(s"worker_$workerId").resolve("shuffle_output")
                 val downloadedFiles = Files.list(shuffleDir).count()
                 
@@ -158,7 +158,6 @@ class ShufflePhaseTest extends FunSuite {
                     s"Worker $workerId should have $NUM_WORKERS files in shuffle_output"
                 )
                 
-                // 파일 크기 확인
                 (0 until NUM_WORKERS).foreach { sourceWorkerId =>
                     val fileName = s"file_${sourceWorkerId}_${workerId}_0.dat"
                     val filePath = shuffleDir.resolve(fileName)
@@ -177,7 +176,7 @@ class ShufflePhaseTest extends FunSuite {
             println(s"\n[Test] ✓ All verifications passed!")
             
             // ============================================
-            // 7. 정리
+            // 9. 정리
             // ============================================
             workers.foreach(_.shutdown())
             registry.shutdown()
@@ -187,7 +186,7 @@ class ShufflePhaseTest extends FunSuite {
         }
     }
 
-    test("Shuffle phase: Workers exchange partition files with gRPC (RemoteFileTransport)") {
+    test("Shuffle phase: Workers exchange partition files with gRPC (Remote)") {
         val testDir = Files.createTempDirectory("shuffle-grpc-test")
         try {
             // ============================================
@@ -196,71 +195,74 @@ class ShufflePhaseTest extends FunSuite {
             setupPartitionFiles(testDir)
 
             // ============================================
-            // 2. 워커 주소 맵 생성 (localhost의 다른 포트 사용)
-            // ============================================
-            val basePort = 50051
-            val workerAddresses = (0 until NUM_WORKERS).map { workerId =>
-                workerId -> s"localhost:${basePort + workerId}"
-            }.toMap
-
-            println(s"[Test] Worker addresses: $workerAddresses")
-
-            // ============================================
-            // 3. Worker 생성 및 시작 (RemoteFileTransport 사용)
+            // 2. Worker 생성
             // ============================================
             val workers = (0 until NUM_WORKERS).map { workerId =>
                 val workerDir = testDir.resolve(s"worker_$workerId")
-                val partitionDir = workerDir.resolve("partitions")
                 Files.createDirectories(workerDir.resolve("shuffle_output"))
 
-                // RemoteFileTransport 생성
-                val transport = new RemoteFileTransport(
-                    workerId = workerId,
-                    partitionDir = partitionDir,
-                    port = basePort + workerId,
-                    workerAddresses = workerAddresses
-                )
-
-                // ShuffleStrategy 생성
-                val strategy = new SequentialShuffleStrategy()
-
-                // Worker 생성
-                val worker = new Worker(
+                val worker = Worker.createRemote(
                     workerId = workerId,
                     numWorkers = NUM_WORKERS,
                     workingDir = workerDir,
-                    inputDirs = Seq.empty,  // 셔플 테스트에서는 불필요
-                    workerAddresses = workerAddresses,
-                    fileTransport = transport,
-                    shuffleStrategy = strategy
+                    inputDirs = Seq.empty
                 )
-
-                // Worker 시작 (gRPC 서버 시작)
-                worker.start()
 
                 worker
             }
 
+            // ============================================
+            // 3. Worker 시작 (gRPC 서버 시작 및 포트 수집)
+            // ============================================
+            val workerPorts = workers.map { worker =>
+                val partitionDir = testDir.resolve(s"worker_${worker.workerId}").resolve("partitions")
+                val port = worker.start(partitionDir)
+                worker.workerId -> port
+            }.toMap
+
             println(s"\n[Test] All ${NUM_WORKERS} workers started with gRPC")
+            println(s"[Test] Worker ports: $workerPorts")
+
+            // ============================================
+            // 4. 워커 주소 설정 (localhost + 각 워커의 포트)
+            // ============================================
+            val workerAddresses = workerPorts.map { case (workerId, port) =>
+                workerId -> s"localhost:$port"
+            }
+
+            workers.foreach { worker =>
+                worker.setWorkerAddresses(workerAddresses)
+            }
 
             // gRPC 서버 시작 대기
             Thread.sleep(2000)
 
             // ============================================
-            // 4. FileStructure 생성 (Map O/D)
+            // 5. Shuffle Phase 준비 (Remote)
+            // ============================================
+            workers.foreach { worker =>
+                val partitionDir = testDir.resolve(s"worker_${worker.workerId}").resolve("partitions")
+                worker.prepareShufflePhase(
+                    useRemote = true,
+                    partitionDir = partitionDir,
+                    registry = None
+                )
+            }
+
+            // ============================================
+            // 6. FileStructure 생성
             // ============================================
             val fileStructure = createTestFileStructure(NUM_WORKERS)
 
             println(s"[Test] FileStructure created: ${fileStructure.allFiles.size} files")
 
             // ============================================
-            // 5. 각 워커가 shufflePhase 실행 (병렬)
+            // 7. 각 워커가 shufflePhase 실행 (병렬)
             // ============================================
             val shuffleFutures = workers.zipWithIndex.map { case (worker, myPartitionId) =>
                 Future {
                     println(s"[Worker ${worker.workerId}] Shuffling partition $myPartitionId (gRPC)")
 
-                    // 제네릭 shufflePhase 호출
                     val result: ShuffleResult = worker.shufflePhase(
                         partitionId = myPartitionId,
                         fileStructure = fileStructure,
@@ -279,26 +281,23 @@ class ShufflePhaseTest extends FunSuite {
             val results = Await.result(Future.sequence(shuffleFutures), 2.minutes)
 
             // ============================================
-            // 6. 검증
+            // 8. 검증
             // ============================================
             println(s"\n[Test] Verifying gRPC results...")
 
             results.foreach { case (workerId, result) =>
-                // 성공 개수 확인
                 assertEquals(
                     result.successCount,
                     NUM_WORKERS,
                     s"Worker $workerId should download $NUM_WORKERS files via gRPC"
                 )
 
-                // 실패 없음
                 assertEquals(
                     result.failureCount,
                     0,
                     s"Worker $workerId should have no failures via gRPC"
                 )
 
-                // 실제 파일 확인
                 val shuffleDir = testDir.resolve(s"worker_$workerId").resolve("shuffle_output")
                 val downloadedFiles = Files.list(shuffleDir).count()
 
@@ -308,7 +307,6 @@ class ShufflePhaseTest extends FunSuite {
                     s"Worker $workerId should have $NUM_WORKERS files in shuffle_output (gRPC)"
                 )
 
-                // 파일 크기 확인
                 (0 until NUM_WORKERS).foreach { sourceWorkerId =>
                     val fileName = s"file_${sourceWorkerId}_${workerId}_0.dat"
                     val filePath = shuffleDir.resolve(fileName)
@@ -327,7 +325,7 @@ class ShufflePhaseTest extends FunSuite {
             println(s"\n[Test] ✓ All gRPC verifications passed!")
 
             // ============================================
-            // 7. 정리
+            // 9. 정리
             // ============================================
             workers.foreach(_.shutdown())
 

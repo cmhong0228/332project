@@ -19,18 +19,29 @@ class WorkerServiceImpl(
 )(implicit ec: ExecutionContext) extends WorkerServiceGrpc.WorkerService {
 
     private var server: Option[Server] = None
+    private var actualPort: Int = -1
 
     /**
      * gRPC 서버 시작
+     * @return 실제 할당된 포트 번호
      */
-    def start(): Unit = {
+    def start(): Int = {
         val serverBuilder = ServerBuilder
-            .forPort(0)
+            .forPort(0)  // 0 = 자동 포트 할당
             .addService(WorkerServiceGrpc.bindService(this, ec))
 
-        server = Some(serverBuilder.build().start())
-        println(s"[WorkerService $workerId] Started on port ??? ")
+        val startedServer = serverBuilder.build().start()
+        server = Some(startedServer)
+        actualPort = startedServer.getPort
+        
+        println(s"[WorkerService $workerId] Started on port $actualPort")
+        actualPort
     }
+    
+    /**
+     * 할당된 포트 번호 반환
+     */
+    def getPort: Int = actualPort
 
     /**
      * gRPC 서버 종료
