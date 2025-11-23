@@ -4,10 +4,7 @@ import java.nio.file.Path
 import scala.util.{Try, Success, Failure}
 import scala.jdk.CollectionConverters._
 import scala.collection.mutable.ArrayBuffer
-/**
- * 12~16 - 타입 불일치 문제로 추가 (distributedSorting.Record와 Record를 컴파일러가 이 둘이 동일한데 다르게 해석)
- * 128줄 오류 해결 위해 추가
- */
+
 
 import distributedsorting.distributedsorting.{Record, Key}
 
