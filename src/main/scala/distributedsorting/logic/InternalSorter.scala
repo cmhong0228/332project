@@ -9,11 +9,7 @@ import scala.jdk.CollectionConverters._
  * 128줄 오류 해결 위해 추가
  */
 
-import distributedsorting.distributedsorting.{Record => ExtRecord, Key}
-object DSTypes {
-  type Record = ExtRecord
-}
-import DSTypes._
+import distributedsorting.distributedsorting.Record
 
 // --- Core Trait ---
 
@@ -46,13 +42,12 @@ trait InternalSorter {
   }
 
   /**
-   * 각 파티션 마다 n개 만큼의 파일 생성 (총 numOfPar * filePiece개의 path)
-   * 각 파일들의 이름은 file_i_j_k.dat (i: InternalSorterWorkerId, j: 각 partition index(1~numOfPar), k: File index(1~filePiece) )
-   * @param n - 각 파티션에 할당될 파일의 index
-   * @param outputDir - 해당 값들을 저장할 output directory
+   * 파티션 개수 만큼의 Path 생성
+   * 각 파일들의 이름은 file_i_j_k.dat (i: InternalSorterWorkerId, j: 각 partition index(1~numOfPar), k: File index)
+   * @param k - 각 파티션에 할당될 파일의 index
    * @return 생성된 파일 경로 List[Path]를 반환
    */
-  def madeFile(n: Int, outputDir: Path): List[Path] = {
+  def madeFile(k: Int): List[Path] = {
     // TODO: numOfPar, internalSortWorkerId, filePiece 등의 필드를 사용하여
     //       요구되는 파일명 패턴(file_i_j_k.dat)에 맞는 경로를 생성하는 로직 구현
     ???
@@ -106,7 +101,6 @@ trait InternalSorter {
     // 각 파티션별 최종 파일 경로 목록 (saveFile의 outputPath 인수로 전달될 값)
     // madeFile(numOfPar, internalSorterOutputDirectory)가 되어야 하지만,
     // 파일 index(k)를 계산해야 하므로 구체적인 구현 클래스에서 처리해야 함.
-    val outputPaths: List[Path] = madeFile(numOfPar, internalSorterOutputDirectory)
 
     var allPartitionedFiles: List[Path] = List.empty
 
@@ -129,6 +123,8 @@ trait InternalSorter {
         // Must close the iterator to release file handles
         fileIterator.close()
       }
+
+      val outputPaths: List[Path] = madeFile(x)
 
       // 3. 정렬된 레코드를 배치 partition 함수에 전달
       val partitionResult = partition(sortedRecords)
