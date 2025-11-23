@@ -3,13 +3,13 @@ package distributedsorting.logic
 import java.nio.file.Path
 import scala.util.{Try, Success, Failure}
 import scala.jdk.CollectionConverters._
-
+import scala.collection.mutable.ArrayBuffer
 /**
  * 12~16 - 타입 불일치 문제로 추가 (distributedSorting.Record와 Record를 컴파일러가 이 둘이 동일한데 다르게 해석)
  * 128줄 오류 해결 위해 추가
  */
 
-import distributedsorting.distributedsorting.Record
+import distributedsorting.distributedsorting.{Record, Key}
 
 // --- Core Trait ---
 
@@ -38,7 +38,9 @@ trait InternalSorter {
    */
   def madeFilePath(): List[Path] = {
     // TODO: internalSorterDirectories를 순회하며 파일 경로를 수집하는 로직 구현
-    ???
+    internalSorterDirectories.flatMap { dir =>
+      (0 until 1).map(i => dir.resolve(s"block_$i.dat"))
+    }.toList
   }
 
   /**
@@ -50,7 +52,14 @@ trait InternalSorter {
   def madeFile(k: Int): List[Path] = {
     // TODO: numOfPar, internalSortWorkerId, filePiece 등의 필드를 사용하여
     //       요구되는 파일명 패턴(file_i_j_k.dat)에 맞는 경로를 생성하는 로직 구현
-    ???
+    val paths = for {
+      j <- 1 to numOfPar // j: Partition Index (1-based)
+    } yield {
+      val i = internalSortWorkerId // i: Worker ID
+      // 경로 패턴: file_i_j_k.dat
+      internalSorterOutputDirectory.resolve(s"file_${i}_${j}_${k}.dat")
+    }
+    paths.toList
   }
 
 
@@ -76,7 +85,21 @@ trait InternalSorter {
    */
   def partition(sortedRecords: Seq[Record]): Seq[Seq[Record]] = {
     // TODO: sortedRecords를 filePivot과 ordering을 사용하여 numOfPar 크기의 시퀀스로 분할하는 로직 구현
-    ???
+
+    val partitions = ArrayBuffer.fill(numOfPar)(ArrayBuffer.empty[Record])
+
+    sortedRecords.foreach { record =>
+      // Record의 Ordering을 직접 사용하여 Record 전체를 비교합니다.
+      val partitionIndex = filePivot.indexWhere { pivotRecord =>
+        // Record Ordering을 사용하여 record와 pivotRecord를 비교합니다.
+        ordering.compare(record, pivotRecord) <= 0
+      } match {
+        case -1 => numOfPar - 1 // 모든 피벗보다 크면 마지막 파티션
+        case index => index    // 피벗 인덱스
+      }
+      partitions(partitionIndex) += record
+    }
+    partitions.map(_.toSeq).toSeq
   }
 
   /**
@@ -89,7 +112,14 @@ trait InternalSorter {
    */
   def saveFile(partitionResult : Seq[Seq[Record]], outputPath : List[Path]): Unit = {
     // TODO: partitionResult의 각 시퀀스를 RecordWriterRunner를 활용하여 해당 outputPath[i]에 저장하는 로직 구현
-    ???
+    partitionResult.zip(outputPath).foreach { case (records, path) =>
+      Try {
+        RecordWriterRunner.WriteRecordIterator(path, records.iterator)
+      } match {
+        case Failure(e) => throw new RuntimeException(s"FATAL: Failed to write partition to $path", e)
+        case _ => // Success
+      }
+    }
   }
 
 
