@@ -108,7 +108,11 @@ class InternalSorterSuite extends FunSuite {
   test("madeFilePath should IGNORE sub-directories and files inside them") {
     // Given: 디렉토리 안에 파일과 서브 디렉토리가 섞인 구조
     val rootDir = tempDir()
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> 9411338 (Update code)
     // 1. 루트 레벨 파일 (읽어야 함)
     val rootFile1 = createFile(rootDir, "valid_root_1.dat")
     val rootFile2 = createFile(rootDir, "valid_root_2.dat")
@@ -157,7 +161,11 @@ class InternalSorterSuite extends FunSuite {
     val kIndex = 99 // 파일 인덱스 k
 
     val sorter = new TestSorter(
+<<<<<<< HEAD
       internalSorterDirectories = Seq.empty, 
+=======
+      internalSorterDirectories = Seq.empty,
+>>>>>>> 9411338 (Update code)
       ordering = null,
       filePivot = Vector.empty,
       numOfPar = numPar,
@@ -185,16 +193,28 @@ class InternalSorterSuite extends FunSuite {
 
       assert(fileName.startsWith(expectedPrefix), s"Filename should start with $expectedPrefix but was $fileName")
       assert(fileName.endsWith(expectedSuffix), s"Filename should end with $expectedSuffix but was $fileName")
+<<<<<<< HEAD
       
+=======
+
+>>>>>>> 9411338 (Update code)
       // 중간 파티션 ID 부분 파싱 검증 (더 엄격한 테스트)
       val parts = fileName.split("_")
       // parts 예시: Array("file", "10", "1", "99.dat")
       assertEquals(parts(1).toInt, workerId) // worker ID 확인
+<<<<<<< HEAD
       
       // 파티션 ID가 유효한 범위인지 확인
       val partitionId = parts(2).toInt
       assert(partitionId >= 1 && partitionId <= numPar, s"Partition ID $partitionId is out of range")
       
+=======
+
+      // 파티션 ID가 유효한 범위인지 확인
+      val partitionId = parts(2).toInt
+      assert(partitionId >= 1 && partitionId <= numPar, s"Partition ID $partitionId is out of range")
+
+>>>>>>> 9411338 (Update code)
       // k값 확인 (확장자 제거)
       val kInFile = parts(3).replace(".dat", "").toInt
       assertEquals(kInFile, kIndex)
@@ -226,15 +246,26 @@ class InternalSorterSuite extends FunSuite {
       // 포맷 가정: file_{workerId}_{partitionId}_{k}.dat
       // split 결과: Array("file", "10", "3", "99.dat") -> 인덱스 2가 파티션 ID
       val parts = fileName.split("_")
+<<<<<<< HEAD
       
       // 혹시라도 형식이 틀려서 에러나는 걸 방지하기 위한 안전장치
       assert(parts.length >= 4, s"Invalid filename format: $fileName")
       
+=======
+
+      // 혹시라도 형식이 틀려서 에러나는 걸 방지하기 위한 안전장치
+      assert(parts.length >= 4, s"Invalid filename format: $fileName")
+
+>>>>>>> 9411338 (Update code)
       parts(2).toInt
     }
 
     val expectedIds = (1 to numPar).toList
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> 9411338 (Update code)
     assertEquals(extractedPartitionIds.sorted, expectedIds)
   }
 
@@ -251,11 +282,19 @@ class InternalSorterSuite extends FunSuite {
     val pivots = Vector(intToRecord(10), intToRecord(20))
 
     val sorter = new TestSorter(
+<<<<<<< HEAD
       Seq.empty, 
       createRecordOrdering(10, 100), 
       pivots, 
       numOfPar = 3, 
       0, 
+=======
+      Seq.empty,
+      createRecordOrdering(10, 100),
+      pivots,
+      numOfPar = 3,
+      0,
+>>>>>>> 9411338 (Update code)
       tempDir()
     )
 
@@ -278,7 +317,11 @@ class InternalSorterSuite extends FunSuite {
     // Given: 모든 데이터가 10보다 작음 -> 모두 P0으로 가야 함
     val pivots = Vector(intToRecord(10), intToRecord(20))
     val sorter = new TestSorter(
+<<<<<<< HEAD
       Seq.empty, createRecordOrdering(10, 100), pivots, 
+=======
+      Seq.empty, createRecordOrdering(10, 100), pivots,
+>>>>>>> 9411338 (Update code)
       numOfPar = 3, 0, tempDir()
     )
 
@@ -298,7 +341,11 @@ class InternalSorterSuite extends FunSuite {
     // Given: 모든 데이터가 20보다 큼 -> 모두 P2로 가야 함
     val pivots = Vector(intToRecord(10), intToRecord(20))
     val sorter = new TestSorter(
+<<<<<<< HEAD
       Seq.empty, createRecordOrdering(10, 100), pivots, 
+=======
+      Seq.empty, createRecordOrdering(10, 100), pivots,
+>>>>>>> 9411338 (Update code)
       numOfPar = 3, 0, tempDir()
     )
 
@@ -318,7 +365,11 @@ class InternalSorterSuite extends FunSuite {
     // Given
     val pivots = Vector(intToRecord(10)) // 파티션 2개 가정
     val sorter = new TestSorter(
+<<<<<<< HEAD
       Seq.empty, createRecordOrdering(10, 100), pivots, 
+=======
+      Seq.empty, createRecordOrdering(10, 100), pivots,
+>>>>>>> 9411338 (Update code)
       numOfPar = 2, 0, tempDir()
     )
 
@@ -337,10 +388,17 @@ class InternalSorterSuite extends FunSuite {
   test("saveFile should write partitioned records to corresponding files correctly") {
     // 1. Given: 환경 및 데이터 설정
     val outDir = tempDir()
+<<<<<<< HEAD
     
     // TestSorter 초기화 (saveFile은 내부 상태값보다는 인자를 주로 사용하므로 기본 설정)
     val sorter = new TestSorter(
       Seq.empty, null, Vector.empty, 
+=======
+
+    // TestSorter 초기화 (saveFile은 내부 상태값보다는 인자를 주로 사용하므로 기본 설정)
+    val sorter = new TestSorter(
+      Seq.empty, null, Vector.empty,
+>>>>>>> 9411338 (Update code)
       numOfPar = 3, internalSortWorkerId = 0, internalSorterOutputDirectory = outDir
     )
 
@@ -351,6 +409,7 @@ class InternalSorterSuite extends FunSuite {
     val p0Data = Seq(100, 200).map(intToRecord)
     val p1Data = Seq.empty[Record]
     val p2Data = Seq(300).map(intToRecord)
+<<<<<<< HEAD
     
     val partitionResult: Seq[Seq[Record]] = Seq(p0Data, p1Data, p2Data)
 
@@ -360,6 +419,17 @@ class InternalSorterSuite extends FunSuite {
     val file2 = outDir.resolve("partition_2.dat")
     val outputPaths = List(file0, file1, file2)
 
+=======
+
+    val partitionResult: Seq[Seq[Record]] = Seq(p0Data, p1Data, p2Data)
+
+    // 저장할 파일 경로 준비 (saveFile의 두 번째 인자)
+    val file0 = outDir.resolve("partition_0.dat")
+    val file1 = outDir.resolve("partition_1.dat")
+    val file2 = outDir.resolve("partition_2.dat")
+    val outputPaths = List(file0, file1, file2)
+
+>>>>>>> 9411338 (Update code)
     // 2. When: 파일 저장 실행
     sorter.saveFile(partitionResult, outputPaths)
 
@@ -418,7 +488,11 @@ class InternalSorterSuite extends FunSuite {
     val data1 = Seq(15, 5, 25).map(intToRecord)
     val file1 = inputDir1.resolve("input_1.dat")
     // 레코드들을 바이트 배열 하나로 합쳐서 파일에 쓰기
+<<<<<<< HEAD
     Files.write(file1, data1.reduce(_ ++ _)) 
+=======
+    Files.write(file1, data1.reduce(_ ++ _))
+>>>>>>> 9411338 (Update code)
 
     // Input 2: [8, 12, 22]
     val data2 = Seq(8, 12, 22).map(intToRecord)

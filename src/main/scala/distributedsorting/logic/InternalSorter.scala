@@ -36,7 +36,10 @@ trait InternalSorter {
   def madeFilePath(): List[Path] = {
     // TODO: internalSorterDirectories를 순회하며 파일 경로를 수집하는 로직 구현
     internalSorterDirectories.flatMap { dir =>
-      (0 until 1).map(i => dir.resolve(s"block_$i.dat"))
+      if (java.nio.file.Files.exists(dir) && java.nio.file.Files.isDirectory(dir)) {
+        val files = java.nio.file.Files.list(dir).iterator().asScala.toList
+        files.filter(_.toString.endsWith(".dat"))
+      } else Nil
     }.toList
   }
 
@@ -83,19 +86,15 @@ trait InternalSorter {
   def partition(sortedRecords: Seq[Record]): Seq[Seq[Record]] = {
     // TODO: sortedRecords를 filePivot과 ordering을 사용하여 numOfPar 크기의 시퀀스로 분할하는 로직 구현
 
-    val partitions = ArrayBuffer.fill(numOfPar)(ArrayBuffer.empty[Record])
+    val partitions = Array.fill(numOfPar)(ArrayBuffer.empty[Record])
 
     sortedRecords.foreach { record =>
-      // Record의 Ordering을 직접 사용하여 Record 전체를 비교합니다.
-      val partitionIndex = filePivot.indexWhere { pivotRecord =>
-        // Record Ordering을 사용하여 record와 pivotRecord를 비교합니다.
-        ordering.compare(record, pivotRecord) <= 0
-      } match {
-        case -1 => numOfPar - 1 // 모든 피벗보다 크면 마지막 파티션
-        case index => index    // 피벗 인덱스
-      }
+      // pivot보다 작은 값은 이전 partition, pivot 이상이면 해당 partition
+      val index = filePivot.indexWhere(pivot => ordering.compare(record, pivot) < 0)
+      val partitionIndex = if (index == -1) numOfPar - 1 else index
       partitions(partitionIndex) += record
     }
+
     partitions.map(_.toSeq).toSeq
   }
 
@@ -159,13 +158,8 @@ trait InternalSorter {
       // 4. 파티션 결과를 파일에 저장
       saveFile(partitionResult, outputPaths)
 
-      /**
-       * TODO
-       * 파티션 버퍼에 남아있는 잔여 데이터를 saveFile()을 호출하여 모두 디스크에 저장하고,
-       * 저장된 파일 경로 리스트를 반환
-       */
       // saveFile이 Unit을 반환하므로, 여기서는 outputPaths를 반환하는 방식으로 처리
-      allPartitionedFiles = outputPaths
+      allPartitionedFiles ++= outputPaths
     }
     allPartitionedFiles
   }
