@@ -18,7 +18,8 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
     // Master와의 통신 스텁 및 Worker ID 정의
     val masterIp: String
     val masterPort: Int
-    lazy val workerInfo: WorkerInfo
+    lazy val workerRegisterInfo: WorkerInfo
+    var workerInfo: WorkerInfo = _
     private lazy val channel: ManagedChannel = ManagedChannelBuilder.forAddress(masterIp, masterPort)
       .usePlaintext()
       .build()
@@ -38,7 +39,7 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
     def registerWorker(): Unit = {
         def attemptCall(): Future[RegisterResponse] = {
             try {
-                masterClient.registerWorker(workerInfo) 
+                masterClient.registerWorker(workerRegisterInfo) 
             } catch {
                 case NonFatal(e) => 
                     Future.failed(e)
@@ -71,6 +72,10 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
                 Thread.sleep(100)
             }
         }
+
+        val myWorkerInfo = _allWorkers.filter(w => w.ip == workerRegisterInfo.ip && w.port == workerRegisterInfo.port)
+        assert(myWorkerInfo.length == 1)
+        workerInfo = myWorkerInfo.head
     }
             
     // ======================= Termination =======================

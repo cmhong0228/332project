@@ -41,11 +41,12 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
         val myPromise = Promise[RegisterResponse]()
 
         this.synchronized {
-            workers.add(request)
-            pendingRegisterPromises.add(myPromise)
-            
             val currentCount = connectedWorkersCount.incrementAndGet()
 
+            val worker = new WorkerInfo(currentCount, request.ip, request.port)
+            workers.add(worker)
+            pendingRegisterPromises.add(myPromise)
+            
             if (currentCount == numWorkers) {
                 val allWorkersSeq = workers.asScala.toSeq
 

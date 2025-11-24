@@ -18,7 +18,7 @@ message KeyMessage {
 
 // worker 정보를 담는 메시지
 message WorkerInfo {
-  string worker_id = 1; // 워커의 고유 ID 또는 IP:Port
+  int32 worker_id = 1;  // 워커 id
   string ip = 2;        // 워커의 IP 주소
   int32 port = 3;       // 워커가 데이터를 받을 Port (나중에 Shuffle 단계에서 필요할 수 있음)
 }
