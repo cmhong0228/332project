@@ -123,7 +123,7 @@ class RemoteFileTransport(
      */
     override def close(): Unit = {
         shuffleClient.foreach(_.shutdown())
-        workerService.foreach(_.shutdown())
+        //workerService.foreach(_.shutdown())
         println(s"[RemoteFileTransport $workerId] Closed")
     }
 }
