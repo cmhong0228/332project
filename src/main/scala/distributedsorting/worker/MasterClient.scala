@@ -18,7 +18,7 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
     // Master와의 통신 스텁 및 Worker ID 정의
     val masterIp: String
     val masterPort: Int
-    val workerInfo: WorkerInfo
+    lazy val workerInfo: WorkerInfo
     private lazy val channel: ManagedChannel = ManagedChannelBuilder.forAddress(masterIp, masterPort)
       .usePlaintext()
       .build()
