@@ -14,14 +14,22 @@ import scala.util.{Try, Success, Failure}
  * 다른 워커로부터 파일 요청을 받아 파일 데이터를 제공
  */
 class WorkerServiceImpl(
-    val workerId: Int,
+    //val workerId: Int,
     val partitionDir: Path
 )(implicit ec: ExecutionContext) extends WorkerServiceGrpc.WorkerService {
 
     private var server: Option[Server] = None
+    
+    private var tempWorkerId: Int = -1
+    private lazy val workerId: Int = tempWorkerId
+
+    def registerWorkerId(id: Int): Unit = {
+        tempWorkerId = id
+        assert(workerId >= 0)
+    }
 
     /**
-     * gRPC 서버 시작
+     * gRPC 서버 시작 (사용 x)
      */
     def start(): Unit = {
         val serverBuilder = ServerBuilder
@@ -33,7 +41,7 @@ class WorkerServiceImpl(
     }
 
     /**
-     * gRPC 서버 종료
+     * gRPC 서버 종료 (사용 x)
      */
     def shutdown(): Unit = {
         server.foreach { s =>
