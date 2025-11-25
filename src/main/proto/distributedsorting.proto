@@ -32,13 +32,13 @@ message WorkerInfo {
 
 // sampling: 데이터 수 통보를 위한 메시지
 message RecordCountReport {
-    string worker_id = 1;      // 워커 ID (등록된 워커임을 확인)
+    int32 worker_id = 1;      // 워커 ID (등록된 워커임을 확인)
     int64 total_record_count = 2; // 워커가 가진 총 레코드 수 (n_i)
 }
 
 // sampling: 워커가 마스터에게 샘플링된 Key 리스트를 보낼 때 사용
 message SampleKeyList {
-    string worker_id = 1;
+    int32 worker_id = 1;
     repeated KeyMessage keys = 2;     // 샘플링된 Key들의 리스트
 }
 
