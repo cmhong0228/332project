@@ -75,7 +75,7 @@ class InternalSorterSuite extends FunSuite {
 
     // 파일 생성
     val fileA1 = createFile(dirA, "data_a1.dat")
-    val fileA2 = createFile(dirA, "data_a2.dat")
+    val fileA2 = createFile(dirA, "data_a2.txt")
     val fileB1 = createFile(dirB, "data_b1.dat")
 
     val sorter = new TestSorter(Seq(emptyDir, dirA, dirB),
