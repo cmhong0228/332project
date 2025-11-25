@@ -103,19 +103,21 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
     // communication
     // ==================================
     private val finishedSortWorkersCount = new AtomicInteger(0)
-    private val pendingSortTerminationPromises = new CopyOnWriteArrayList[Promise[CompletionResponse]]()
+    private val pendingSortTerminationPromises = new CopyOnWriteArrayList[Promise[FileIdMap]]()
+    private val fileIdsResponces: Seq[Seq[FileIdMessage]] = List()
 
-    override def reportSortCompletion(request: WorkerInfo): Future[CompletionResponse] = {
-        val myPromise = Promise[CompletionResponse]() 
+    override def reportFileIds(request: FileIdRequest): Future[FileIdMap] = {
+        val myPromise = Promise[FileIdMap]()
 
         this.synchronized {
-            // TODO: 개수가 아닌 각 worker가 끝난건지 확인
             pendingSortTerminationPromises.add(myPromise)
+            fileIdsResponces.add(request.fileIds)
 
             val currentFinished = finishedSortWorkersCount.incrementAndGet()
-            
+
             if (currentFinished == numWorkers) {
-                val response = CompletionResponse(success = true)
+                val map = fileidsResponces.flatten.groupBy(_.j)
+                val response = new FileIdMap(map)
 
                 pendingSortTerminationPromises.asScala.foreach { promise =>
                     promise.success(response)
@@ -124,7 +126,6 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
                 pendingSortTerminationPromises.clear()
             }
         }
-        
         myPromise.future
     }
 

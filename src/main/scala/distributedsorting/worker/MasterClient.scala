@@ -98,21 +98,30 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
     }
 
     // ======================= Communication =======================
-    def reportSortCompletion(): Unit = {
+    def reportFileIds(fileIdSet: Set[FileId]): FileStructure = {
         val timeOut = Duration.Inf
-        val reportFuture: Future[CompletionResponse] = masterClient.reportCompletion(workerInfo)
-    
-        val result = Try(Await.result(reportFuture, timeOut)) 
+        val fileIdMessageList = fileIdSet.map(fi => new FileIdMessage(fi.sourceWorkerId, fi.partitionId, fi.sortedRunId)).toList
+        val reportFuture: Future[FileIdMap] = masterClient.reportFileIds(new FileIdRequest(workerInfo.workerId, fileIdMessageList))
 
-        result match {
-            case Success(response) if response.success =>
-                ()
-                // 성공 시, 필요한 경우 추가
+        var success = false
+        var fileIdMap = _
 
-            case _ =>
-                () 
-                // 실패 시, 예외처리 필요한 경우 추가
+        while (!success) {
+            val result = Try(Await.result(reportFuture, timeOut))
+
+            result match {
+                case Success(response) => 
+                    fileIdMap = response.fileIds.map { case (key, list) =>
+                        key -> list.map(fi => new FileId(fi.i, fi.j, fi.k))
+                    }
+                    success = true
+                
+                case _ =>
+                    ()
+            }
         }
+        
+        new FileStructure(fileIdMap)
     }
 
     // ======================= Sampling =======================

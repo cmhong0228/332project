@@ -12,6 +12,13 @@ message KeyMessage {
     bytes value = 1;
 }
 
+// partition 결과 파일 id message
+message FileIdMessage {
+    int32 i = 1; // i'th node (파일을 생성한 워커 ID)
+    int32 j = 2; // j'th partition (대상 워커 ID, 요청하는 워커)
+    int32 k = 3; // k'th index file (같은 i→j에 대한 k번째 파일)
+}
+
 // =========================================================
 // 2. 워커 -> 마스터 메시지
 // =========================================================
@@ -33,6 +40,12 @@ message RecordCountReport {
 message SampleKeyList {
     string worker_id = 1;
     repeated KeyMessage keys = 2;     // 샘플링된 Key들의 리스트
+}
+
+// 워커가 가지고 있는 FileId들을 보낼 때 사용
+message FileIdRequest {
+    int32 worker_id = 1;
+    repeated FileIDMessage file_ids = 2;
 }
 
 // =========================================================
@@ -72,6 +85,14 @@ message SamplingControl {
     double new_ratio = 1;             // 재샘플링을 위한 새로운 확률 (Optional)
 }
 
+message FileIdList {
+    repeated FileIDMessage file_ids = 1;
+}
+
+message FileIdMap {
+    map<int32, FileIdList> file_ids = 1;
+}
+
 // =========================================================
 // 4. 마스터 서비스 정의 (gRPC)
 // =========================================================
@@ -83,8 +104,8 @@ service MasterService {
     // 종료 보고
     rpc ReportCompletion (WorkerInfo) returns (CompletionResponse);
 
-    // sort&partition 종료 보고
-    rpc ReportSortCompletion (WorkerInfo) returns (CompletionResponse);
+    // FileId들을 보고하고, map으로 응답
+    rpc ReportFileIds (FileIdRequest) returns (FileIdMap);
 
     // 샘플링 비율 결정 단계
     // 등록된 워커가 자신의 레코드 수를 보고하고, 마스터는 샘플링 비율을 응답
