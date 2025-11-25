@@ -7,10 +7,11 @@ import io.grpc.{Server, ServerBuilder}
 import com.typesafe.config.ConfigFactory
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import java.nio.file.{Path, Paths}
+import java.nio.file.{Path, Paths, Files}
 import distributedsorting.distributedsorting._
 import distributedsorting.logic._
 import distributedsorting.worker.TestHelpers.{FileStructure, ShuffleResult}
+import scala.jdk.CollectionConverters._
 
 object Worker {
     val config = ConfigFactory.load()
@@ -74,7 +75,7 @@ class WorkerApp (
 
   // for InternalSorter
   override val internalSorterDirectories = inputDirs
-  override val createRecordOrdering(KEY_SIZE, RECORD_SIZE)
+  override val ordering = createRecordOrdering(KEY_SIZE, RECORD_SIZE)
   override lazy val filePivot = pivots
   override lazy val numOfPar = pivots.length + 1
   override lazy val internalSortWorkerId = workerId
@@ -97,6 +98,8 @@ class WorkerApp (
 
 
   def run(): Unit = {
+    initializeOutputDirectory()
+
     server.start()
     workerPort = server.getPort
 
@@ -115,7 +118,7 @@ class WorkerApp (
 
     // Sort & Partition
     runSortAndPartition()
-    
+
     val localFileIds: Set[FileId] = FileStructureManager.collectLocalFileIds(partitionOutputDir)
     val fileStructure: FileStructure = reportFileIds(localFileIds)
 
@@ -148,7 +151,7 @@ class WorkerApp (
 
     server.shutdown()
 
-    // TODO: temp 파일, 폴더 정리
+    cleanupTempDirectories()
   }
 
   /**
@@ -187,6 +190,20 @@ class WorkerApp (
         println(s"Worker $workerId: Successfully fetched $successCount files")
         
         buildResult(successCount, failureCount)
+    }
+
+    // outputdirectory를 지우고, 사용할 directory 생성
+    def initializeOutputDirectory(): Unit = {
+      DirectoryManager.deleteRecursively(outputDir, false)
+      DirectoryManager.createDirectoryIfNotExists(tempDir)
+      DirectoryManager.createDirectoryIfNotExists(partitionOutputDir)
+      DirectoryManager.createDirectoryIfNotExists(shuffleOutputDir)
+      DirectoryManager.createDirectoryIfNotExists(mergeTempDir)
+    }
+
+    // temp directory 삭제
+    def cleanupTempDirectories(): Unit = {
+      DirectoryManager.deleteRecursively(tempDir, true)
     }
 }
 
@@ -259,5 +276,48 @@ object ArgsUtils {
       }
     }
     newArgs.toArray
+  }
+}
+
+object DirectoryManager{
+  /**
+   * 디렉토리(또는 파일)를 재귀적으로 삭제하는 함수
+   * @param path 삭제할 대상 경로
+   * @param deleteRoot true면 path 자체도 삭제, false면 path 내부만 비우고 껍데기는 유지
+   */
+  def deleteRecursively(path: Path, deleteRoot: Boolean): Unit = {
+    if (!Files.exists(path)) return
+
+    if (Files.isDirectory(path)) {
+      val stream = Files.list(path)
+      try {
+        stream.iterator().asScala.foreach { child =>
+          deleteRecursively(child, deleteRoot = true)
+        }
+      } finally {
+        stream.close()
+      }
+    }
+
+    if (deleteRoot) {
+      Files.delete(path)
+    }
+  }
+
+  /**
+   * 해당 경로에 디렉토리가 없으면 생성하는 함수
+   * (부모 디렉토리가 없으면 같이 생성함)
+   */
+  def createDirectoryIfNotExists(path: Path): Unit = {
+    if (!Files.exists(path)) {
+      try {
+        Files.createDirectories(path)
+      } catch {
+        case e: Exception => 
+          ()
+      }
+    } else {
+      // 이미 존재
+    }
   }
 }
