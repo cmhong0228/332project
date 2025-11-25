@@ -115,6 +115,7 @@ class WorkerApp (
 
     // Sampling
     pivots = executeSampling(inputDirs)
+    println(s"pivots: $pivots")
 
     // Sort & Partition
     runSortAndPartition()
