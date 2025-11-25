@@ -88,7 +88,7 @@ class WorkerApp (
   val externalSorterInputDirectory: Path = shuffleOutputDir
   val externalSorterOutputDirectory: Path = outputDir
   val externalSorterTempDirectory: Path = mergeTempDir
-  val externalSorterOrdering: Ordering[Record] = createRecordOrdering(KEY_SIZE, KEY_SIZE)
+  val externalSorterOrdering: Ordering[Record] = ordering
   val chunkSize: Long = config.getBytes(s"$configPath.external-sort.chunk-size").toLong  
   val outputPrefix: String = config.getString(s"$configPath.external-sort.output-prefix")
   val outputStartPostfix: Int = config.getInt(s"$configPath.external-sort.output-start-postfix")
