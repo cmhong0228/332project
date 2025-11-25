@@ -40,7 +40,7 @@ class WorkerApp (
   port: Int,
   inputDirsStr: Seq[String],
   outputDirStr: String
-) extends MasterClient with ExternalSorter{   
+) extends MasterClient with ExternalSorter with InternalSorter{   
   implicit val ec: ExecutionContext = ExecutionContext.global  
   val config = ConfigFactory.load()
   val configPath = "distributedsorting"
@@ -71,6 +71,14 @@ class WorkerApp (
   override val RECORD_SIZE = config.getInt(s"$configPath.record-info.record-length")
 
   var pivots: Vector[Record] = _
+
+  // for InternalSorter
+  override val internalSorterDirectories = inputDirs
+  override val createRecordOrdering(KEY_SIZE, RECORD_SIZE)
+  override lazy val filePivot = pivots
+  override lazy val numOfPar = pivots.length + 1
+  override lazy val internalSortWorkerId = workerId
+  override val internalSorterOutputDirectory = partitionOutputDir
 
   // for shuffle
   val shuffleStrategy = new SequentialShuffleStrategy()
@@ -105,7 +113,9 @@ class WorkerApp (
     // Sampling
     pivots = executeSampling(inputDirs)
 
-    // TODO: Sort&Partition
+    // Sort & Partition
+    runSortAndPartition()
+    
     val localFileIds: Set[FileId] = FileStructureManager.collectLocalFileIds(partitionOutputDir)
     val fileStructure: FileStructure = reportFileIds(localFileIds)
 
