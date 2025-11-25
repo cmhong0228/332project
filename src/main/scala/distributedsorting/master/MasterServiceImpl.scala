@@ -213,7 +213,7 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
                 val pivotKeys: Vector[Key] = selectPivots(sortedKeys)
                 val paddedpivots: Vector[Record] = createPaddedPivots(pivotKeys)
                 
-                val protoPivots: Seq[KeyMessage] = pivotKeys.map { keyArray =>
+                val protoPivots: Seq[KeyMessage] = paddedpivots.map { keyArray =>
                     KeyMessage(value = ByteString.copyFrom(keyArray))
                 }
                 
