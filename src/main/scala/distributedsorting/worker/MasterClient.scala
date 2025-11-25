@@ -11,6 +11,7 @@ import scala.concurrent.duration._
 import java.util.concurrent.TimeUnit
 import scala.util.control.NonFatal
 import scala.util.{Try, Success, Failure}
+import distributedsorting.worker.TestHelpers.FileStructure
 
 //trait MasterClient { self: RecordCountCalculator with RecordExtractor => 
 trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampler {
@@ -18,7 +19,7 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
     // Master와의 통신 스텁 및 Worker ID 정의
     val masterIp: String
     val masterPort: Int
-    lazy val workerRegisterInfo: WorkerInfo
+    val workerRegisterInfo: WorkerInfo
     var workerInfo: WorkerInfo = _
     private lazy val channel: ManagedChannel = ManagedChannelBuilder.forAddress(masterIp, masterPort)
       .usePlaintext()
@@ -104,7 +105,7 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
         val reportFuture: Future[FileIdMap] = masterClient.reportFileIds(new FileIdRequest(workerInfo.workerId, fileIdMessageList))
 
         var success = false
-        var fileIdMap = _
+        var fileIdMap: Map[Int, Seq[FileId]] = null
 
         while (!success) {
             val result = Try(Await.result(reportFuture, timeOut))
@@ -112,7 +113,7 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
             result match {
                 case Success(response) => 
                     fileIdMap = response.fileIds.map { case (key, list) =>
-                        key -> list.map(fi => new FileId(fi.i, fi.j, fi.k))
+                        key -> list.fileIds.map(fi => new FileId(fi.i, fi.j, fi.k))
                     }
                     success = true
                 

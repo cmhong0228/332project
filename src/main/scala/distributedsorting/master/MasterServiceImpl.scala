@@ -104,19 +104,21 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
     // ==================================
     private val finishedSortWorkersCount = new AtomicInteger(0)
     private val pendingSortTerminationPromises = new CopyOnWriteArrayList[Promise[FileIdMap]]()
-    private val fileIdsResponces: Seq[Seq[FileIdMessage]] = List()
+    private var fileIdsResponces: Seq[Seq[FileIdMessage]] = List()
 
     override def reportFileIds(request: FileIdRequest): Future[FileIdMap] = {
         val myPromise = Promise[FileIdMap]()
 
         this.synchronized {
             pendingSortTerminationPromises.add(myPromise)
-            fileIdsResponces.add(request.fileIds)
+            fileIdsResponces = fileIdsResponces :+ request.fileIds
 
             val currentFinished = finishedSortWorkersCount.incrementAndGet()
 
             if (currentFinished == numWorkers) {
-                val map = fileidsResponces.flatten.groupBy(_.j)
+                val map = fileIdsResponces.flatten.groupBy(_.j).map { case (key, list) =>
+                    key -> new FileIdList(list)
+                }
                 val response = new FileIdMap(map)
 
                 pendingSortTerminationPromises.asScala.foreach { promise =>

@@ -10,6 +10,7 @@ import scala.collection.mutable.ArrayBuffer
 import java.nio.file.{Path, Paths}
 import distributedsorting.distributedsorting._
 import distributedsorting.logic._
+import distributedsorting.worker.TestHelpers.{FileStructure, ShuffleResult}
 
 object Worker {
     val config = ConfigFactory.load()
@@ -46,6 +47,8 @@ class WorkerApp (
   val workerIp: String = InetAddress.getLocalHost.getHostAddress
   var workerPort = 0 // run 이후 설정 됨
 
+  var workerId = -1
+
   val inputDirs: Seq[Path] = inputDirsStr.map(Paths.get(_))
   val outputDir: Path = Paths.get(outputDirStr)
   val tempDir: Path = outputDir.resolve("temp")
@@ -57,7 +60,7 @@ class WorkerApp (
   // worker server 생성  
   val workerService = new WorkerServiceImpl(partitionOutputDir)
   val server = ServerBuilder.forPort(0)
-      .addService(WorkerServiceGrpc.bindService(workerService))
+      .addService(WorkerServiceGrpc.bindService(workerService, ec))
       .build()
   
   override val masterIp = ip
@@ -68,6 +71,9 @@ class WorkerApp (
   override val RECORD_SIZE = config.getInt(s"$configPath.record-info.record-length")
 
   var pivots: Vector[Record] = _
+
+  // for shuffle
+  val shuffleStrategy = new SequentialShuffleStrategy()
 
   // for ExternalSorter
   val externalSorterInputDirectory: Path = shuffleOutputDir
@@ -88,12 +94,12 @@ class WorkerApp (
 
     // worker registration
     registerWorker()
-    val workerId = workerInfo.workerId
+    workerId = workerInfo.workerId
     workerService.registerWorkerId(workerId)
     println(s"complete registration")
     println(s"my info: id $workerId, ip ${workerInfo.ip}, port ${workerInfo.port}")
     println("========== all workers ==========")
-    getAllWorkers().foreach(w => println(s"id ${w.workerId}, ip ${w.ip}, port ${w.port}"))
+    getAllWorkers.foreach(w => println(s"id ${w.workerId}, ip ${w.ip}, port ${w.port}"))
     println("=================================")
 
     // Sampling
@@ -105,13 +111,13 @@ class WorkerApp (
 
     // Shuffle
     val partitionFileStructure: FileStructure = fileStructure
-    var workerAddresses: Map[Int, String] = getAllWorkers().map { w =>
+    var workerAddresses: Map[Int, String] = getAllWorkers.map { w =>
       w.workerId -> s"${w.ip}:${w.port}"
     }.toMap
     var remoteFileTransport = new RemoteFileTransport(workerId, partitionOutputDir, workerAddresses)
     remoteFileTransport.init() // 다른 워커 서버 연결
 
-    val result: ShuffleResult = worker.shufflePhase(
+    val result: ShuffleResult = shufflePhase(
                         partitionId = workerId,
                         fileStructure = partitionFileStructure,
                         fileTransport = remoteFileTransport,
@@ -122,7 +128,7 @@ class WorkerApp (
     try {
       remoteFileTransport.close()
     } catch {
-      println("Error: cannot close connection")
+      case e: Throwable => println("Error: cannot close connection")
     }
 
     // Merge

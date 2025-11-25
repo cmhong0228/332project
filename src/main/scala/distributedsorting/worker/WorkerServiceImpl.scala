@@ -170,8 +170,10 @@ class WorkerServiceImpl(
     }
 }
 
+/*
 object WorkerServiceImpl {
     def apply(workerId: Int, partitionDir: Path)(implicit ec: ExecutionContext): WorkerServiceImpl = {
         new WorkerServiceImpl(workerId, partitionDir)
     }
 }
+*/
