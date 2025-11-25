@@ -3,7 +3,9 @@ package distributedsorting.worker
 import scopt.OptionParser
 import java.net.InetAddress
 import scala.concurrent.ExecutionContext
+import io.grpc.{Server, ServerBuilder}
 import com.typesafe.config.ConfigFactory
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import java.nio.file.{Path, Paths}
 import distributedsorting.distributedsorting._
@@ -37,29 +39,40 @@ class WorkerApp (
   port: Int,
   inputDirsStr: Seq[String],
   outputDirStr: String
-) extends MasterClient with ExternalSorter{     
+) extends MasterClient with ExternalSorter{   
+  implicit val ec: ExecutionContext = ExecutionContext.global  
   val config = ConfigFactory.load()
   val configPath = "distributedsorting"
   val workerIp: String = InetAddress.getLocalHost.getHostAddress
-  // TODO: worker server 생성
-  val workerPort = 1234 // 추후에 변경 workerServer.getPort()
+  var workerPort = 0 // run 이후 설정 됨
 
   val inputDirs: Seq[Path] = inputDirsStr.map(Paths.get(_))
   val outputDir: Path = Paths.get(outputDirStr)
   val tempDir: Path = outputDir.resolve("temp")
+
+  val partitionOutputDir: Path = tempDir.resolve("partition-output")
+  val shuffleOutputDir: Path = tempDir.resolve("shuffle-output")
+  val mergeTempDir: Path = tempDir.resolve("external-sorter-temp")
   
-  implicit override val ec: ExecutionContext = ExecutionContext.global   
+  // worker server 생성  
+  val workerService = new WorkerServiceImpl(partitionOutputDir)
+  val server = ServerBuilder.forPort(0)
+      .addService(WorkerServiceGrpc.bindService(workerService))
+      .build()
+  
   override val masterIp = ip
   override val masterPort = port
-  override val workerInfo = new WorkerInfo(workerId = s"$workerIp:$workerPort", ip = workerIp, port = workerPort)
-
+  override lazy val workerRegisterInfo = new WorkerInfo(workerId = -1, ip = workerIp, port = workerPort)
+  
   override val KEY_SIZE = config.getInt(s"$configPath.record-info.key-length")
   override val RECORD_SIZE = config.getInt(s"$configPath.record-info.record-length")
 
+  var pivots: Vector[Record] = _
+
   // for ExternalSorter
-  val externalSorterInputDirectory: Path = tempDir.resolve("shuffle-output")
+  val externalSorterInputDirectory: Path = shuffleOutputDir
   val externalSorterOutputDirectory: Path = outputDir
-  val externalSorterTempDirectory: Path = tempDir.resolve("external-sorter-temp")
+  val externalSorterTempDirectory: Path = mergeTempDir
   val externalSorterOrdering: Ordering[Record] = createRecordOrdering(KEY_SIZE, KEY_SIZE)
   val chunkSize: Long = config.getBytes(s"$configPath.external-sort.chunk-size").toLong  
   val outputPrefix: String = config.getString(s"$configPath.external-sort.output-prefix")
@@ -68,24 +81,97 @@ class WorkerApp (
   val EXTERNAL_SORT_USABLE_MEMORY_RATIO: Double = config.getDouble(s"$configPath.external-sort.max-memory-usage-ratio")
   val BUFFER_SIZE: Long = config.getBytes(s"$configPath.io.buffer-size").toLong
 
-  var pivots: Vector[Record] = _
 
   def run(): Unit = {
-    registerWorker()
+    server.start()
+    workerPort = server.getPort
 
+    // worker registration
+    registerWorker()
+    val workerId = workerInfo.workerId
+    workerService.registerWorkerId(workerId)
+    println(s"complete registration")
+    println(s"my info: id $workerId, ip ${workerInfo.ip}, port ${workerInfo.port}")
+    println("========== all workers ==========")
+    getAllWorkers().foreach(w => println(s"id ${w.workerId}, ip ${w.ip}, port ${w.port}"))
+    println("=================================")
+
+    // Sampling
     pivots = executeSampling(inputDirs)
 
     // TODO: Sort&Partition
+    val localFileIds: Set[FileId] = FileStructureManager.collectLocalFileIds(partitionOutputDir)
+    val fileStructure: FileStructure = reportFileIds(localFileIds)
 
-    reportSortCompletion()
+    // Shuffle
+    val partitionFileStructure: FileStructure = fileStructure
+    var workerAddresses: Map[Int, String] = getAllWorkers().map { w =>
+      w.workerId -> s"${w.ip}:${w.port}"
+    }.toMap
+    var remoteFileTransport = new RemoteFileTransport(workerId, partitionOutputDir, workerAddresses)
+    remoteFileTransport.init() // 다른 워커 서버 연결
 
-    // TODO: Shuffle
+    val result: ShuffleResult = worker.shufflePhase(
+                        partitionId = workerId,
+                        fileStructure = partitionFileStructure,
+                        fileTransport = remoteFileTransport,
+                        getFiles = (fs: FileStructure) => fs.getFilesForPartition(workerId),
+                        buildResult = (success: Int, failure: Int) => ShuffleResult(success, failure)
+                    )
+    
+    try {
+      remoteFileTransport.close()
+    } catch {
+      println("Error: cannot close connection")
+    }
 
-    // TODO: Merge
-    // executeExternalSort()
+    // Merge
+    executeExternalSort()
 
     reportCompletion()
+
+    server.shutdown()
+
+    // TODO: temp 파일, 폴더 정리
   }
+
+  /**
+     * Shuffle Phase 실행
+     * 
+     * 제네릭 타입을 사용하여 FileStructure와 ShuffleResult 타입에 독립적
+     * 
+     * @param partitionId 이 워커가 담당할 파티션 ID
+     * @param fileStructure 파일 구조 정보 (타입 FS는 테스트/실제 구현에서 결정)
+     * @param fileTransport fileTransport 객체
+     * @param getFiles FileStructure에서 필요한 파일들을 추출하는 함수
+     * @param buildResult 성공/실패 카운트로 결과 객체를 생성하는 함수
+     * @return 결과 객체 (타입 R은 테스트/실제 구현에서 결정)
+     */
+    def shufflePhase[FS, R](
+        partitionId: Int, 
+        fileStructure: FS,
+        fileTransport: FileTransport,
+        getFiles: FS => Set[FileId],          // FileStructure → 필요한 파일들
+        buildResult: (Int, Int) => R          // (성공 수, 실패 수) → 결과
+    ): R = {
+        // 1. needed_file 초기화
+        val neededFiles = getFiles(fileStructure).to(mutable.Set)
+        
+        // 2. ShuffleStrategy를 사용하여 파일 요청
+        // val shuffleOutputDir 클래스 변수에 정의됨
+        
+        val successCount = shuffleStrategy.execute(
+            neededFiles,
+            shuffleOutputDir,
+            fileTransport
+        )
+        
+        val failureCount = getFiles(fileStructure).size - successCount
+        
+        println(s"Worker $workerId: Successfully fetched $successCount files")
+        
+        buildResult(successCount, failureCount)
+    }
 }
 
 case class WorkerConfig(
@@ -158,83 +244,4 @@ object ArgsUtils {
     }
     newArgs.toArray
   }
-}
-import distributedsorting.distributedsorting._
-import java.nio.file.Path
-import scala.collection.mutable
-// import distributedsorting.TestHelpers._
-
-/**
- * 분산 정렬 시스템의 워커 노드
- * 
- * 주의: shufflePhase의 타입들(FileStructure, ShuffleResult)은 
- * 현재 테스트용 임시 타입입니다. (TestHelpers 참조)
- * 실제 구현 시 다른 팀과 합의하여 정식 타입으로 교체될 예정입니다.
- */
-class Worker(
-    val workerId: Int,
-    val numWorkers: Int,
-    val workingDir: Path,               // 워커의 작업 디렉토리
-    val inputDirs: Seq[Path],           // 입력 데이터 디렉토리들
-    val workerAddresses: Map[Int, String] = Map.empty,  // workerId -> address
-    fileTransport: FileTransport,       // 파일 전송 추상화 (DI)
-    shuffleStrategy: ShuffleStrategy    // Shuffle 요청 전략 (DI)
-) {
-
-    /**
-     * 워커 시작 (서비스 스레드 등 초기화)
-     */
-    def start(): Unit = {
-        fileTransport.init()
-        // TODO: 기타 초기화 작업
-    }
-
-    /**
-     * 워커 종료 (리소스 정리)
-     */
-    def shutdown(): Unit = {
-         fileTransport.close()
-        // TODO: 기타 리소스 정리 작업
-    }
-
-    /**
-     * Shuffle Phase 실행
-     * 
-     * 제네릭 타입을 사용하여 FileStructure와 ShuffleResult 타입에 독립적
-     * 
-     * @param partitionId 이 워커가 담당할 파티션 ID
-     * @param fileStructure 파일 구조 정보 (타입 FS는 테스트/실제 구현에서 결정)
-     * @param getFiles FileStructure에서 필요한 파일들을 추출하는 함수
-     * @param buildResult 성공/실패 카운트로 결과 객체를 생성하는 함수
-     * @return 결과 객체 (타입 R은 테스트/실제 구현에서 결정)
-     */
-    def shufflePhase[FS, R](
-        partitionId: Int, 
-        fileStructure: FS,
-        getFiles: FS => Set[FileId],          // FileStructure → 필요한 파일들
-        buildResult: (Int, Int) => R          // (성공 수, 실패 수) → 결과
-    ): R = {
-        // 1. needed_file 초기화
-        val neededFiles = getFiles(fileStructure).to(mutable.Set)
-        
-        // 2. ShuffleStrategy를 사용하여 파일 요청
-        val shuffleOutputDir = workingDir.resolve("shuffle_output")
-        
-        val successCount = shuffleStrategy.execute(
-            neededFiles,
-            shuffleOutputDir,
-            fileTransport
-        )
-        
-        val failureCount = getFiles(fileStructure).size - successCount
-        
-        println(s"Worker $workerId: Successfully fetched $successCount files")
-        
-        buildResult(successCount, failureCount)
-    }
-}
-
-// TODO: object Worker 선언 로직 (local버전 / remote 버전)
-object Worker {
-    // Factory methods can be added here
 }
