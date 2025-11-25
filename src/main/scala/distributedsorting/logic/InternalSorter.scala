@@ -1,6 +1,6 @@
 package distributedsorting.logic
 
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
 import scala.util.{Try, Success, Failure}
 import scala.jdk.CollectionConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -34,13 +34,19 @@ trait InternalSorter {
    * @return inputDirectory의 파일들의 경로를 저장한 List[Path]를 반환
    */
   def madeFilePath(): List[Path] = {
-    // TODO: internalSorterDirectories를 순회하며 파일 경로를 수집하는 로직 구현
-    internalSorterDirectories.flatMap { dir =>
-      if (java.nio.file.Files.exists(dir) && java.nio.file.Files.isDirectory(dir)) {
-        val files = java.nio.file.Files.list(dir).iterator().asScala.toList
-        files.filter(_.toString.endsWith(".dat"))
-      } else Nil
-    }.toList
+    internalSorterDirectories
+      .filter(dir => Files.exists(dir) && Files.isDirectory(dir))
+      .flatMap { dir =>
+        val stream = Files.list(dir)
+        try {
+          stream.iterator().asScala
+            .filter(path => Files.isRegularFile(path))
+            .toList
+        } finally {
+          stream.close()
+        }
+      }
+      .toList
   }
 
   /**
