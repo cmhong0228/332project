@@ -45,7 +45,7 @@ message SampleKeyList {
 // 워커가 가지고 있는 FileId들을 보낼 때 사용
 message FileIdRequest {
     int32 worker_id = 1;
-    repeated FileIDMessage file_ids = 2;
+    repeated FileIdMessage file_ids = 2;
 }
 
 // =========================================================
@@ -86,7 +86,7 @@ message SamplingControl {
 }
 
 message FileIdList {
-    repeated FileIDMessage file_ids = 1;
+    repeated FileIdMessage file_ids = 1;
 }
 
 message FileIdMap {
