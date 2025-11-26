@@ -116,9 +116,11 @@ class WorkerApp (
     // Sampling
     pivots = executeSampling(inputDirs)
     println(s"pivots: $pivots")
+    println("finish sampling phase")
 
     // Sort & Partition
     runSortAndPartition()
+    println("finish sort and partition phase")
 
     val localFileIds: Set[FileId] = FileStructureManager.collectLocalFileIds(partitionOutputDir)
     val fileStructure: FileStructure = reportFileIds(localFileIds)
@@ -144,9 +146,11 @@ class WorkerApp (
     } catch {
       case e: Throwable => println("Error: cannot close connection")
     }
+    println("finish shuffle phase")
 
     // Merge
     executeExternalSort()
+    println("finish merge phase")
 
     reportCompletion()
 
