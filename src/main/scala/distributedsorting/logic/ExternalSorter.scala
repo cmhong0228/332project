@@ -109,8 +109,8 @@ trait ExternalSorter {
         recordIters.foreach { iter =>
             if (iter.hasNext) {
                 val nextVal = iter.next()
-                assert(externalSorterWorkerId <= 1 || externalSorterOrdering(nextVal, filePivot(externalSorterWorkerId-2)) >= 0)
-                assert(externalSorterWorkerId > filePivot.size || externalSorterOrdering(nextVal, filePivot(externalSorterWorkerId-1)) < 0)
+                assert(externalSorterWorkerId <= 1 || externalSorterOrdering.compare(nextVal, filePivot(externalSorterWorkerId-2)) >= 0)
+                assert(externalSorterWorkerId > filePivot.size || externalSorterOrdering.compare(nextVal, filePivot(externalSorterWorkerId-1)) < 0)
                 pq.enqueue((nextVal, iter))
             }
         }
