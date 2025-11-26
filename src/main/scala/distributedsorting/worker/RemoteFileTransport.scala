@@ -5,6 +5,8 @@ import java.nio.file.{Files, Path, StandardCopyOption}
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 import scala.util.{Try, Success, Failure}
+import java.util.concurrent.ConcurrentHashMap
+import scala.jdk.CollectionConverters._
 
 /**
  * gRPC를 이용한 원격 파일 전송 구현
@@ -21,6 +23,8 @@ class RemoteFileTransport(
 
     private var workerService: Option[WorkerServiceImpl] = None
     private var shuffleClient: Option[ShuffleClient] = None
+
+    val failedWorkerSet: scala.collection.mutable.Set[Int] = ConcurrentHashMap.newKeySet[Int]().asScala
 
     /**
      * gRPC 서버와 클라이언트 초기화
@@ -49,8 +53,12 @@ class RemoteFileTransport(
     override def requestFile(fileId: FileId, destPath: Path): Boolean = {
         println(s"[RemoteFileTransport $workerId] Requesting ${fileId.toFileName} from Worker ${fileId.sourceWorkerId}")
 
-        // 자기 자신에게 요청하는 경우: gRPC 거치지 않고 직접 파일 복사
-        if (fileId.sourceWorkerId == workerId) {
+        if (Files.exists(destPath)) { // 이미 저장되어 있는 경우
+            true
+        } else if (failedWorkerSet.contains(fileId.sourceWorkerId)) { // 실패한 worker에 대한 재시도 하지 않음
+            false
+        } else if (fileId.sourceWorkerId == workerId) {
+            // 자기 자신에게 요청하는 경우: gRPC 거치지 않고 직접 파일 복사
             println(s"[RemoteFileTransport $workerId] Self-request detected, copying directly")
 
             try {
@@ -95,11 +103,13 @@ class RemoteFileTransport(
                         case e: Exception =>
                             println(s"[RemoteFileTransport $workerId] Failed to request ${fileId.toFileName}: ${e.getMessage}")
                             e.printStackTrace()
+                            failedWorkerSet.add(fileId.sourceWorkerId)
                             false
                     }
 
                 case None =>
                     println(s"[RemoteFileTransport $workerId] ShuffleClient not initialized")
+                    failedWorkerSet.add(fileId.sourceWorkerId)
                     false
             }
         }
