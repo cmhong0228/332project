@@ -121,6 +121,7 @@ class WorkerApp (
     // Sort & Partition
     runSortAndPartition()
     println("finish sort and partition phase")
+    val totalRecordsAfterSort = Files.walk(partitionOutputDir, 1).filter(p => Files.isRegularFile(p)).mapToLong(p => Files.size(p)).sum() / 100
 
     val localFileIds: Set[FileId] = FileStructureManager.collectLocalFileIds(partitionOutputDir)
     val fileStructure: FileStructure = reportFileIds(localFileIds)
@@ -147,6 +148,7 @@ class WorkerApp (
       case e: Throwable => println("Error: cannot close connection")
     }
     println("finish shuffle phase")
+    val totalRecordsAfterShuffle = Files.walk(shuffleOutputDir, 1).filter(p => Files.isRegularFile(p)).mapToLong(p => Files.size(p)).sum() / 100
 
     // Merge
     executeExternalSort()
@@ -157,6 +159,8 @@ class WorkerApp (
     server.shutdown()
 
     cleanupTempDirectories()
+    val totalRecordsAfterMerge = Files.walk(outputDir, 1).filter(p => Files.isRegularFile(p)).mapToLong(p => Files.size(p)).sum() / 100
+    println(s"total records: sort $totalRecordsAfterSort, shuffle $totalRecordsAfterShuffle, merge $totalRecordsAfterMerge")
   }
 
   /**
