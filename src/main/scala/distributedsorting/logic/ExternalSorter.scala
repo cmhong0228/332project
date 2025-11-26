@@ -61,6 +61,9 @@ trait ExternalSorter {
      * 결과를 저장할 파일 이름의 postfix의 시작값
      */
     val outputStartPostfix: Int
+    
+    val filePivot : Vector[Record]
+    val externalSorterWorkerId: Int
 
     /** 
      * config for numMaxMergeGroup
@@ -105,7 +108,10 @@ trait ExternalSorter {
 
         recordIters.foreach { iter =>
             if (iter.hasNext) {
-                pq.enqueue((iter.next(), iter))
+                val nextVal = iter.next()
+                assert(externalSorterWorkerId <= 1 || externalSorterOrdering(nextVal, filePivot(externalSorterWorkerId-2)) >= 0)
+                assert(externalSorterWorkerId > filePivot.size || externalSorterOrdering(nextVal, filePivot(externalSorterWorkerId-1)) < 0)
+                pq.enqueue((nextVal, iter))
             }
         }
 
