@@ -71,7 +71,7 @@ trait InternalSorter {
 
   // Used lazy val to avoid initialization order dependency on InternalSorterDirectories
   // madeFilePath 호출 시 인자 없음 (트레이트 필드 사용)
-  lazy val filePath: List[Path] = madeFilePath()
+  lazy val filePath: List[Path] = madeFilePath().sorted
 
 
   lazy val filePiece: Int = filePath.size
