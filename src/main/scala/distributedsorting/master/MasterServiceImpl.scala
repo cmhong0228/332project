@@ -21,34 +21,59 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
     private val configPath = "distributedsorting"
 
     // ==================================
-    // 상태 관리 변수 (Thread-Safe)
+    // 상태 관리 변수
     // ==================================
-    private val workers = new CopyOnWriteArrayList[WorkerInfo]()
-
     private val connectedWorkersCount = new AtomicInteger(0)
+
+    case class WorkerKey(ip: String, paths: Set[String])
+
+    private val workerMap = scala.collection.mutable.Map[WorkerKey, WorkerInfo]()
+
+    private val workers = new Array[WorkerInfo](numWorkers)
+
+    private var isCollectedAllWorkers = false
     
     // ==================================
     // Registration
     // ==================================
     private val pendingRegisterPromises = new CopyOnWriteArrayList[Promise[RegisterResponse]]()
 
+    private var totalInputRecords: Long = 0
+
     /**
      * [RPC 메서드] Worker가 Master에 등록할 때 사용
      * @param request RegisterRequest worker 정보 포함
      * @return RegisterResponse 
      */
-    override def registerWorker(request: WorkerInfo): Future[RegisterResponse] = {
+    override def registerWorker(request: WorkerRegisterInfo): Future[RegisterResponse] = {
         val myPromise = Promise[RegisterResponse]()
+        val workerInputpaths = request.paths.toSet
+        val workerKey = new WorkerKey(request.ip, workerInputpaths)
 
         this.synchronized {
-            val currentCount = connectedWorkersCount.incrementAndGet()
-
-            val worker = new WorkerInfo(currentCount, request.ip, request.port)
-            workers.add(worker)
-            pendingRegisterPromises.add(myPromise)
+            var currentCount = 0
+            if (workerMap.contains(workerKey)) { // 재 접속한 경우
+                currentCount = connectedWorkersCount.get()
+                val priorWorkerInfo = workerMap(workerKey)
+                val workerId = priorWorkerInfo.workerId
+                val index = workerId - 1
+                assert(workers(index).workerId == workerId)
+                val workerInfo = new WorkerInfo(workerId, request.ip, request.port)
+                workers(index) = workerInfo
+                pendingRegisterPromises.add(myPromise)
+                workerMap(workerKey) = workerInfo
+                finishedWorkers(index) = false // 재 접속 했기 때문에 초기화
+            } else { // 새로운 접속 
+                currentCount = connectedWorkersCount.incrementAndGet()
+                val workerInfo = new WorkerInfo(currentCount, request.ip, request.port)
+                workers(currentCount-1) = workerInfo
+                workerMap(workerKey) = workerInfo
+                pendingRegisterPromises.add(myPromise)
+                totalInputRecords = totalInputRecords + request.numRecords
+            }  
             
-            if (currentCount == numWorkers) {
-                val allWorkersSeq = workers.asScala.toSeq
+            if (currentCount >= numWorkers) {
+                val allWorkersSeq = workers.toSeq
 
                 val response = RegisterResponse(
                     success = true,
@@ -61,8 +86,11 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
                 
                 pendingRegisterPromises.clear()
 
-                val workerIps = allWorkersSeq.map(_.ip).mkString(", ")
-                println(workerIps)
+                if (!isCollectedAllWorkers) {
+                    val workerIps = allWorkersSeq.map(_.ip).mkString(", ")
+                    println(workerIps)
+                    isCollectedAllWorkers = true
+                }                
             }
         }
         myPromise.future
@@ -71,19 +99,25 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
     // ==================================
     // termination
     // ==================================
-    private val finishedWorkersCount = new AtomicInteger(0)
     private val pendingTerminationPromises = new CopyOnWriteArrayList[Promise[CompletionResponse]]()
+    private val finishedWorkers = new Array[Boolean](numWorkers)
 
-    override def reportCompletion(request: WorkerInfo): Future[CompletionResponse] = {
+    private val finalRecordsForEachWorkers = new Array[Long](numWorkers)
+
+    override def reportCompletion(request: CompletionRequest): Future[CompletionResponse] = {
         val myPromise = Promise[CompletionResponse]() 
+        val workerId = request.getWorkerInfo.workerId
+        val index = workerId - 1
 
         this.synchronized {
-            // TODO: 개수가 아닌 각 worker가 끝난건지 확인
             pendingTerminationPromises.add(myPromise)
-
-            val currentFinished = finishedWorkersCount.incrementAndGet()
+            if (!finishedWorkers(index)) {
+                finishedWorkers(index) = true
+                finalRecordsForEachWorkers(index) = request.numRecords
+            }            
             
-            if (currentFinished == numWorkers) {
+            if (finishedWorkers.forall(_ == true)) {
+                assert(totalInputRecords == finalRecordsForEachWorkers.sum)
                 val response = CompletionResponse(success = true)
 
                 pendingTerminationPromises.asScala.foreach { promise =>
@@ -102,21 +136,24 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
     // ==================================
     // communication
     // ==================================
-    private val finishedSortWorkersCount = new AtomicInteger(0)
     private val pendingSortTerminationPromises = new CopyOnWriteArrayList[Promise[FileIdMap]]()
-    private var fileIdsResponces: Seq[Seq[FileIdMessage]] = List()
+    private var fileIdsResponses: Seq[Seq[FileIdMessage]] = List()
+    private val reportedFileIdWorkers = new Array[Boolean](numWorkers)
 
     override def reportFileIds(request: FileIdRequest): Future[FileIdMap] = {
         val myPromise = Promise[FileIdMap]()
+        val workerId = request.workerId
+        val index = workerId - 1
 
         this.synchronized {
             pendingSortTerminationPromises.add(myPromise)
-            fileIdsResponces = fileIdsResponces :+ request.fileIds
+            if (reportedFileIdWorkers(index) == false) {
+                reportedFileIdWorkers(index) = true
+                fileIdsResponses = fileIdsResponses :+ request.fileIds
+            }
 
-            val currentFinished = finishedSortWorkersCount.incrementAndGet()
-
-            if (currentFinished == numWorkers) {
-                val map = fileIdsResponces.flatten.groupBy(_.j).map { case (key, list) =>
+            if (reportedFileIdWorkers.forall(_ == true)) {
+                val map = fileIdsResponses.flatten.groupBy(_.j).map { case (key, list) =>
                     key -> new FileIdList(list)
                 }
                 val response = new FileIdMap(map)
@@ -129,6 +166,18 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
             }
         }
         myPromise.future
+    }
+
+    override def requestWorkerInfos(request: WorkerInfosRequest): Future[WorkerInfosReply] = {
+        this.synchronized {
+            val currentWorkers = workers.toSeq
+
+            val response = WorkerInfosReply(
+                workerList = currentWorkers
+            )
+
+            Future.successful(response)
+        }
     }
 
     // ==================================
@@ -156,13 +205,16 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
     // 정렬 시 사용할 ordering
     val ordering: Ordering[Key] = createRecordOrdering(KEY_SIZE, KEY_SIZE)
 
-    private val reportCounter = new AtomicInteger(0)
     private val totalRecordSum = new AtomicLong(0)
-    private val samplingRatioPromise = Promise[SamplingRatio]()
+    private val pendingRecordCountPromises = new CopyOnWriteArrayList[Promise[SamplingRatio]]()
+    private val pendingSamplePromises = new CopyOnWriteArrayList[Promise[SampleDecision]]()
 
-    private val sampleCounter = new AtomicInteger(0)
     private val allSamples = new ConcurrentLinkedQueue[Key]()
-    private val sampleDecisionPromise = Promise[SampleDecision]()
+
+    private val recordCountedWorkers = new Array[Boolean](numWorkers)
+    private val sampledWorkers = new Array[Boolean](numWorkers)
+    private var isCompletedPivots = false
+    private var pivots: Vector[Record] = _
 
     /**
      * [RPC 메서드] Worker가 자신이 가진 레코드 개수를 Master에게 보고할 때 호출
@@ -171,23 +223,31 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
      * 내부적으로 SamplingPolicy.calculateSamplingRatio를 호출
      */
     override def reportRecordCount(request: RecordCountReport): Future[SamplingRatio] = {
-        val future = samplingRatioPromise.future
+        val myPromise = Promise[SamplingRatio]()
+        val workerId = request.workerId
+        val index = workerId - 1
 
         this.synchronized {
-            totalRecordSum.addAndGet(request.totalRecordCount)
-            val currentCount = reportCounter.incrementAndGet()
+            pendingRecordCountPromises.add(myPromise)
+            if (!recordCountedWorkers(index)){
+                totalRecordSum.addAndGet(request.totalRecordCount)
+                recordCountedWorkers(index) = true
+            }
 
-            if (currentCount == numWorkers) {
+            if (recordCountedWorkers.forall(_ == true)) {
                 val totalRecords = totalRecordSum.get()
                 val ratio = calculateSamplingRatio(totalRecords)
                 
-                val response = SamplingRatio(ratio = ratio)
+                val response = SamplingRatio(ratio = ratio, isFinished = isCompletedPivots)
                 
-                samplingRatioPromise.success(response)
+                pendingRecordCountPromises.asScala.foreach { promise =>
+                    promise.success(response)
+                }
+
+                pendingRecordCountPromises.clear()
             }
         }
-        
-        future
+        myPromise.future
     }
 
     /**
@@ -198,39 +258,45 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
      * @return SampleDecision (계산된 최종 Pivot Key 리스트를 Worker에게 전송)
      */
     override def sendSampleKeys(request: SampleKeyList): Future[SampleDecision] = {
-        val future = sampleDecisionPromise.future
+        val myPromise = Promise[SampleDecision]()
+        val workerId = request.workerId
+        val index = workerId - 1
 
         this.synchronized {
-            val keysFromWorker: Seq[Key] = request.keys.map(_.value.toByteArray)
+            pendingSamplePromises.add(myPromise)
         
-            allSamples.addAll(keysFromWorker.asJava)
+            if (!sampledWorkers(index)) {
+                val keysFromWorker: Seq[Key] = request.keys.map(_.value.toByteArray)
+                allSamples.addAll(keysFromWorker.asJava)            
+                sampledWorkers(index) = true
+            }
             
-            val currentCount = sampleCounter.incrementAndGet()
-            
-            if (currentCount == numWorkers) {
-                val aggregatedKeys: Seq[Key] = allSamples.asScala.toSeq
-                val sortedKeys = sortSamples(aggregatedKeys)
-                val pivotKeys: Vector[Key] = selectPivots(sortedKeys)
-                val paddedpivots: Vector[Record] = createPaddedPivots(pivotKeys)
-                
-                val protoPivots: Seq[KeyMessage] = paddedpivots.map { keyArray =>
-                    KeyMessage(value = ByteString.copyFrom(keyArray))
+            if (sampledWorkers.forall(_ ==  true)) {
+                if (!isCompletedPivots) {
+                    val aggregatedKeys: Seq[Key] = allSamples.asScala.toSeq
+                    val sortedKeys = sortSamples(aggregatedKeys)
+                    val pivotKeys: Vector[Key] = selectPivots(sortedKeys)
+                    pivots = createPaddedPivots(pivotKeys)   
+                    isCompletedPivots = true     
                 }
                 
+                val protoPivots: Seq[KeyMessage] = pivots.map { keyArray =>
+                    KeyMessage(value = ByteString.copyFrom(keyArray))
+                }
                 val partitionInfo = PartitionInfo(pivots = protoPivots)
                 val response = SampleDecision(
                     proceed = true,
                     content = SampleDecision.Content.PartitionInfo(partitionInfo)
                 )
-                /*
-                    TODO: sample된 개수 맞지 않는 경우 처리 (일반적으로 일어나진 않지만 예외처리)
-                */
                 
-                sampleDecisionPromise.success(response)
+                pendingSamplePromises.asScala.foreach { promise =>
+                    promise.success(response)
+                }
+
+                pendingSamplePromises.clear()
             }
         }
-        
-        future
+        myPromise.future
     }
 
 }

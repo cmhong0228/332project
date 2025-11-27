@@ -66,7 +66,7 @@ class WorkerApp (
   
   override val masterIp = ip
   override val masterPort = port
-  override lazy val workerRegisterInfo = new WorkerInfo(workerId = -1, ip = workerIp, port = workerPort)
+  val workerInputPaths = normalizeDirPaths(inputDirs)
   
   override val KEY_SIZE = config.getInt(s"$configPath.record-info.key-length")
   override val RECORD_SIZE = config.getInt(s"$configPath.record-info.record-length")
@@ -128,25 +128,35 @@ class WorkerApp (
 
     // Shuffle
     val partitionFileStructure: FileStructure = fileStructure
-    var workerAddresses: Map[Int, String] = getAllWorkers.map { w =>
-      w.workerId -> s"${w.ip}:${w.port}"
-    }.toMap
-    var remoteFileTransport = new RemoteFileTransport(workerId, partitionOutputDir, workerAddresses)
-    remoteFileTransport.init() // 다른 워커 서버 연결
+    var isSuccessShuffle = false
+    while (!isSuccessShuffle) {
+      var workerAddresses: Map[Int, String] = getAllWorkers.map { w =>
+        w.workerId -> s"${w.ip}:${w.port}"
+      }.toMap
+      var remoteFileTransport = new RemoteFileTransport(workerId, partitionOutputDir, workerAddresses)
+      remoteFileTransport.init() // 다른 워커 서버 연결
 
-    val result: ShuffleResult = shufflePhase(
-                        partitionId = workerId,
-                        fileStructure = partitionFileStructure,
-                        fileTransport = remoteFileTransport,
-                        getFiles = (fs: FileStructure) => fs.getFilesForPartition(workerId),
-                        buildResult = (success: Int, failure: Int) => ShuffleResult(success, failure)
-                    )
-    
-    try {
-      remoteFileTransport.close()
-    } catch {
-      case e: Throwable => println("Error: cannot close connection")
+      val result: ShuffleResult = shufflePhase(
+                          partitionId = workerId,
+                          fileStructure = partitionFileStructure,
+                          fileTransport = remoteFileTransport,
+                          getFiles = (fs: FileStructure) => fs.getFilesForPartition(workerId),
+                          buildResult = (success: Int, failure: Int) => ShuffleResult(success, failure)
+                      )
+      
+      try {
+        remoteFileTransport.close()
+      } catch {
+        case e: Throwable => println("Error: cannot close connection")
+      }
+
+      isSuccessShuffle = result.failureCount == 0
+      if (!isSuccessShuffle) {
+        Thread.sleep(500)
+        resetWorkerInfos()
+      }
     }
+    
     println("finish shuffle phase")
     val totalRecordsAfterShuffle = Files.walk(shuffleOutputDir, 1).filter(p => Files.isRegularFile(p)).mapToLong(p => Files.size(p)).sum() / 100
 
@@ -213,6 +223,17 @@ class WorkerApp (
     // temp directory 삭제
     def cleanupTempDirectories(): Unit = {
       DirectoryManager.deleteRecursively(tempDir, true)
+    }
+
+    def normalizeDirPaths(paths: Seq[Path]): Seq[String] = {
+      paths.map { path =>
+        try {
+          path.toRealPath().toString
+        } catch {
+          case _: java.io.IOException =>
+            path.toAbsolutePath.normalize().toString
+        }
+      }
     }
 }
 

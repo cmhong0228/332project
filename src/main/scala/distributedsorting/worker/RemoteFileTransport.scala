@@ -78,6 +78,11 @@ class RemoteFileTransport(
                 true
             } catch {
                 case e: Exception =>
+                    try {
+                        Files.deleteIfExists(destPath)
+                    } catch {
+                        case deleteEx: Exception => println("Failed to delete corrupted file")
+                    }
                     println(s"[RemoteFileTransport $workerId] Failed to copy ${fileId.toFileName}: ${e.getMessage}")
                     e.printStackTrace()
                     false
@@ -101,6 +106,11 @@ class RemoteFileTransport(
                         true
                     } catch {
                         case e: Exception =>
+                            try {
+                                Files.deleteIfExists(destPath)
+                            } catch {
+                                case deleteEx: Exception => println("Failed to delete corrupted file")
+                            }
                             println(s"[RemoteFileTransport $workerId] Failed to request ${fileId.toFileName}: ${e.getMessage}")
                             e.printStackTrace()
                             failedWorkerSet.add(fileId.sourceWorkerId)
