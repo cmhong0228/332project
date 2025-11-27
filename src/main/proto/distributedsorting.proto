@@ -23,6 +23,13 @@ message FileIdMessage {
 // 2. 워커 -> 마스터 메시지
 // =========================================================
 
+// worker 등록 정보를 담는 메시지
+message WorkerRegisterInfo {
+    string ip = 1;
+    int32 port = 2;
+    repeated string paths = 3;
+}
+
 // worker 정보를 담는 메시지
 message WorkerInfo {
   int32 worker_id = 1;  // 워커 id
@@ -48,6 +55,8 @@ message FileIdRequest {
     repeated FileIdMessage file_ids = 2;
 }
 
+message WorkerInfosRequest {}
+
 // =========================================================
 // 3. 마스터 -> 워커 메시지
 // =========================================================
@@ -65,7 +74,8 @@ message CompletionResponse {
 
 // sampling: 마스터가 워커에게 샘플링 비율을 보낼 때 사용
 message SamplingRatio {
-    double ratio = 1;          // 샘플링 확률 (k/n)
+    bool is_finished = 1;
+    double ratio = 2;          // 샘플링 확률 (k/n)
 }
 
 // sampling: 마스터가 워커에게 최종 파티션 정보와 순서를 보낼 때 사용
@@ -93,13 +103,17 @@ message FileIdMap {
     map<int32, FileIdList> file_ids = 1;
 }
 
+message WorkerInfosReply {
+    repeated WorkerInfo worker_list = 1;
+}
+
 // =========================================================
 // 4. 마스터 서비스 정의 (gRPC)
 // =========================================================
 
 service MasterService {
     // 워커가 마스터에게 등록할 때 호출하는 함수
-    rpc RegisterWorker (WorkerInfo) returns (RegisterResponse);
+    rpc RegisterWorker (WorkerRegisterInfo) returns (RegisterResponse);
 
     // 종료 보고
     rpc ReportCompletion (WorkerInfo) returns (CompletionResponse);
@@ -114,6 +128,8 @@ service MasterService {
     // 최종 파티션 경계 결정 단계
     // 워커가 샘플 Key 리스트를 보고하고, 마스터는 최종 피벗 정보를 응답
     rpc SendSampleKeys (SampleKeyList) returns (SampleDecision);
+
+    rpc requestWorkerInfos (WorkerInfosRequest) returns (WorkerInfosReply);
 }
 
 // =========================================================
