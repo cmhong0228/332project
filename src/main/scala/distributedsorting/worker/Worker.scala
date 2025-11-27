@@ -80,6 +80,7 @@ class WorkerApp (
   override lazy val numOfPar = pivots.length + 1
   override lazy val internalSortWorkerId = workerId
   override val internalSorterOutputDirectory = partitionOutputDir
+  override val INTERNAL_SORT_USABLE_MEMORY_RATIO = config.getDouble(s"$configPath.internal-sort.max-memory-usage-ratio")
 
   // for shuffle
   val shuffleStrategy = new SequentialShuffleStrategy()
