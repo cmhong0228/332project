@@ -9,6 +9,8 @@ import java.util.concurrent.{ConcurrentLinkedQueue, CopyOnWriteArrayList}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import scala.jdk.CollectionConverters._
 import com.google.protobuf.ByteString
+import io.grpc.Context
+import java.util.concurrent.Executors
 
 // master를 종료 시키기 위한 trait
 trait ShutdownController {
@@ -81,7 +83,7 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
                 )
 
                 pendingRegisterPromises.asScala.foreach { promise =>
-                    promise.success(response)
+                    promise.trySuccess(response)
                 }
                 
                 pendingRegisterPromises.clear()
@@ -104,10 +106,30 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
 
     private val finalRecordsForEachWorkers = new Array[Long](numWorkers)
 
+    private val cancellationExecutor = Executors.newCachedThreadPool()
+
     override def reportCompletion(request: CompletionRequest): Future[CompletionResponse] = {
         val myPromise = Promise[CompletionResponse]() 
         val workerId = request.getWorkerInfo.workerId
         val index = workerId - 1
+
+        val ctx = Context.current()
+
+        ctx.addListener(new Context.CancellationListener {
+            override def cancelled(context: Context): Unit = {
+                MasterServiceImpl.this.synchronized { 
+                    if (!myPromise.isCompleted) {
+                        pendingTerminationPromises.remove(myPromise)
+
+                        if (finishedWorkers(index)) {
+                            finishedWorkers(index) = false 
+                        }
+                        
+                        myPromise.tryFailure(new RuntimeException("Worker disconnected"))
+                    }
+                }
+            }
+        }, cancellationExecutor)
 
         this.synchronized {
             pendingTerminationPromises.add(myPromise)
@@ -121,7 +143,7 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
                 val response = CompletionResponse(success = true)
 
                 pendingTerminationPromises.asScala.foreach { promise =>
-                    promise.success(response)
+                    promise.trySuccess(response)
                 }
 
                 pendingTerminationPromises.clear()
@@ -159,7 +181,7 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
                 val response = new FileIdMap(map)
 
                 pendingSortTerminationPromises.asScala.foreach { promise =>
-                    promise.success(response)
+                    promise.trySuccess(response)
                 }
 
                 pendingSortTerminationPromises.clear()
@@ -241,7 +263,7 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
                 val response = SamplingRatio(ratio = ratio, isFinished = isCompletedPivots)
                 
                 pendingRecordCountPromises.asScala.foreach { promise =>
-                    promise.success(response)
+                    promise.trySuccess(response)
                 }
 
                 pendingRecordCountPromises.clear()
@@ -290,7 +312,7 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
                 )
                 
                 pendingSamplePromises.asScala.foreach { promise =>
-                    promise.success(response)
+                    promise.trySuccess(response)
                 }
 
                 pendingSamplePromises.clear()
