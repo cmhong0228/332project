@@ -24,7 +24,7 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
     val outputDir: Path
     val workerIp: String
     var workerPort: Int
-    val inputRecords = calculateTotalRecords(inputDirs)
+    lazy val inputRecords = calculateTotalRecords(inputDirs)
     lazy val workerRegisterInfo: WorkerRegisterInfo = new WorkerRegisterInfo(ip = workerIp, port = workerPort, paths = workerInputPaths, numRecords = inputRecords)
     
     private lazy val channel: ManagedChannel = ManagedChannelBuilder.forAddress(masterIp, masterPort)
