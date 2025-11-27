@@ -60,14 +60,59 @@ class SequentialShuffleStrategy extends ShuffleStrategy {
     }
 }
 
-// 로컬환경, 원격환경 모두에 대해 sequential 방식으로 테스트 통과 후 구현 예정
-class LimitedConcurrencyShuffleStrategy extends ShuffleStrategy {
+/**
+ * 제한된 동시성 Shuffle 전략
+ *
+ * 여러 파일을 동시에 요청하되, 최대 동시성을 제한하여 네트워크/메모리 과부하 방지
+ *
+ * @param maxConcurrency 동시에 전송할 최대 파일 수 (기본값: 10)
+ *
+ * 장점: 순차 방식보다 훨씬 빠름, 네트워크 대역폭 효율적 사용
+ * 단점: 메모리 사용량 증가 (동시 전송 파일 수만큼)
+ * 사용: 일반적인 경우 권장
+ */
+class LimitedConcurrencyShuffleStrategy(maxConcurrency: Int = 10) extends ShuffleStrategy {
     override def execute(
         neededFiles: mutable.Set[FileId],
         shuffleOutputDir: Path,
         fileTransport: FileTransport
     ): Int = {
-        // TODO: 제한된 동시성으로 파일 요청
-        0
+        import scala.concurrent.{Future, Await, ExecutionContext}
+        import scala.concurrent.duration._
+        import ExecutionContext.Implicits.global
+
+        var successCount = 0
+        val fileList = neededFiles.toList
+
+        println(s"[LimitedConcurrencyShuffleStrategy] Shuffling ${fileList.size} files with concurrency=$maxConcurrency")
+
+        // maxConcurrency개씩 배치로 나눠서 처리
+        fileList.grouped(maxConcurrency).zipWithIndex.foreach { case (batch, batchIndex) =>
+            println(s"[LimitedConcurrencyShuffleStrategy] Processing batch ${batchIndex + 1} (${batch.size} files)")
+
+            // 배치 내의 파일들을 병렬로 요청
+            val futures = batch.map { fileId =>
+                Future {
+                    val destPath = shuffleOutputDir.resolve(fileId.toFileName)
+                    val result = fileTransport.requestFile(fileId, destPath)
+                    (fileId, result)
+                }
+            }
+
+            // 배치가 완료될 때까지 대기 (최대 120초)
+            try {
+                val results = Await.result(Future.sequence(futures), 120.seconds)
+                val batchSuccessCount = results.count(_._2 == true)
+                successCount += batchSuccessCount
+                println(s"[LimitedConcurrencyShuffleStrategy] Batch ${batchIndex + 1} completed: $batchSuccessCount/${batch.size} succeeded")
+            } catch {
+                case e: Exception =>
+                    println(s"[LimitedConcurrencyShuffleStrategy] Batch ${batchIndex + 1} failed: ${e.getMessage}")
+                    e.printStackTrace()
+            }
+        }
+
+        println(s"[LimitedConcurrencyShuffleStrategy] Total: $successCount/${fileList.size} files succeeded")
+        successCount
     }
 }

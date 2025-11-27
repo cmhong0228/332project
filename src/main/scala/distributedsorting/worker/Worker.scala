@@ -82,7 +82,8 @@ class WorkerApp (
   override val internalSorterOutputDirectory = partitionOutputDir
 
   // for shuffle
-  val shuffleStrategy = new SequentialShuffleStrategy()
+  // Sequential: 안정적이지만 느림, LimitedConcurrency: 빠르지만 메모리 사용 증가
+  val shuffleStrategy = new LimitedConcurrencyShuffleStrategy(maxConcurrency = 10)
 
   // for ExternalSorter
   val externalSorterInputDirectory: Path = shuffleOutputDir
