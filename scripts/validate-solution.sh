@@ -2,7 +2,7 @@
 
 # 1. 입력 인자 처리
 TARGET_DIR=$1
-VALSORT_CMD=${2:-../64/valsort}
+VALSORT_CMD=${2:-64/valsort}
 
 if [ -z "$TARGET_DIR" ]; then
     echo "Usage: $0 <directory_path> [valsort_path]"

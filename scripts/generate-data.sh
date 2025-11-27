@@ -5,7 +5,7 @@
 # ==========================================
 
 # 1. Default Settings
-DEFAULT_GENSORT_PATH="../64/gensort"
+DEFAULT_GENSORT_PATH="64/gensort"
 GENSORT_BIN="$DEFAULT_GENSORT_PATH"
 
 IS_ASCII=false           # Default: Binary
