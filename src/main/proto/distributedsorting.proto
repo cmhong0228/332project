@@ -28,6 +28,7 @@ message WorkerRegisterInfo {
     string ip = 1;
     int32 port = 2;
     repeated string paths = 3;
+    int64 num_records = 4;
 }
 
 // worker 정보를 담는 메시지
@@ -35,6 +36,11 @@ message WorkerInfo {
   int32 worker_id = 1;  // 워커 id
   string ip = 2;        // 워커의 IP 주소
   int32 port = 3;       // 워커가 데이터를 받을 Port (나중에 Shuffle 단계에서 필요할 수 있음)
+}
+
+message CompletionRequest {
+    WorkerInfo worker_info = 1;
+    int64 num_records = 2;
 }
 
 // sampling: 데이터 수 통보를 위한 메시지
@@ -116,7 +122,7 @@ service MasterService {
     rpc RegisterWorker (WorkerRegisterInfo) returns (RegisterResponse);
 
     // 종료 보고
-    rpc ReportCompletion (WorkerInfo) returns (CompletionResponse);
+    rpc ReportCompletion (CompletionRequest) returns (CompletionResponse);
 
     // FileId들을 보고하고, map으로 응답
     rpc ReportFileIds (FileIdRequest) returns (FileIdMap);

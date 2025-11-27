@@ -38,6 +38,8 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
     // ==================================
     private val pendingRegisterPromises = new CopyOnWriteArrayList[Promise[RegisterResponse]]()
 
+    private var totalInputRecords: Long = 0
+
     /**
      * [RPC 메서드] Worker가 Master에 등록할 때 사용
      * @param request RegisterRequest worker 정보 포함
@@ -67,6 +69,7 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
                 workers(currentCount-1) = workerInfo
                 workerMap(workerKey) = workerInfo
                 pendingRegisterPromises.add(myPromise)
+                totalInputRecords = totalInputRecords + request.numRecords
             }  
             
             if (currentCount >= numWorkers) {
@@ -99,16 +102,22 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
     private val pendingTerminationPromises = new CopyOnWriteArrayList[Promise[CompletionResponse]]()
     private val finishedWorkers = new Array[Boolean](numWorkers)
 
-    override def reportCompletion(request: WorkerInfo): Future[CompletionResponse] = {
+    private val finalRecordsForEachWorkers = new Array[Long](numWorkers)
+
+    override def reportCompletion(request: CompletionRequest): Future[CompletionResponse] = {
         val myPromise = Promise[CompletionResponse]() 
-        val workerId = request.workerId
+        val workerId = request.getWorkerInfo.workerId
         val index = workerId - 1
 
         this.synchronized {
             pendingTerminationPromises.add(myPromise)
-            finishedWorkers(index) = true
+            if (!finishedWorkers(index)) {
+                finishedWorkers(index) = true
+                finalRecordsForEachWorkers(index) = request.numRecords
+            }            
             
             if (finishedWorkers.forall(_ == true)) {
+                assert(totalInputRecords == finalRecordsForEachWorkers.sum)
                 val response = CompletionResponse(success = true)
 
                 pendingTerminationPromises.asScala.foreach { promise =>

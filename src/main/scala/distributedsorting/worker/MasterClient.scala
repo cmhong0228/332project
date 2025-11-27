@@ -17,8 +17,15 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
     
     val masterIp: String
     val masterPort: Int
-    val workerRegisterInfo: WorkerRegisterInfo
     var workerInfo: WorkerInfo = _
+
+    val workerInputPaths: Seq[String]
+    val inputDirs: Seq[Path]
+    val outputDir: Path
+    val workerIp: String
+    var workerPort: Int
+    val inputRecords = calculateTotalRecords(inputDirs)
+    lazy val workerRegisterInfo: WorkerRegisterInfo = new WorkerRegisterInfo(ip = workerIp, port = workerPort, paths = workerInputPaths, numRecords = inputRecords)
     
     private lazy val channel: ManagedChannel = ManagedChannelBuilder.forAddress(masterIp, masterPort)
       .usePlaintext()
@@ -80,8 +87,9 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
             
     // ======================= Termination =======================
     def reportCompletion(): Unit = {
+        val completionReport = new CompletionRequest(Some(workerInfo), calculateTotalRecords(Seq(outputDir)))
         val response = callWithRetry(
-            masterClient.reportCompletion(workerInfo),
+            masterClient.reportCompletion(completionReport),
             "ReportCompletion"
         )
         

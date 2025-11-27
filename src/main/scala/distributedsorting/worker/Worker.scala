@@ -67,7 +67,6 @@ class WorkerApp (
   override val masterIp = ip
   override val masterPort = port
   val workerInputPaths = normalizeDirPaths(inputDirs)
-  override lazy val workerRegisterInfo = new WorkerRegisterInfo(ip = workerIp, port = workerPort, paths = workerInputPaths)
   
   override val KEY_SIZE = config.getInt(s"$configPath.record-info.key-length")
   override val RECORD_SIZE = config.getInt(s"$configPath.record-info.record-length")
