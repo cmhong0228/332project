@@ -82,8 +82,10 @@ class WorkerApp (
   override val internalSorterOutputDirectory = partitionOutputDir
 
   // for shuffle
-  // Sequential: 안정적이지만 느림, LimitedConcurrency: 빠르지만 메모리 사용 증가
-  val shuffleStrategy = new LimitedConcurrencyShuffleStrategy(maxConcurrency = 10)
+  // Sequential: 안정적이지만 느림 (1개씩 순차)
+  // LimitedConcurrency: 빠름 (10개씩 배치)
+  // PerWorker: 각 워커당 1개씩 동시 다운로드 (워커 개수만큼 병렬, 균형적)
+  val shuffleStrategy = new PerWorkerShuffleStrategy(filesPerWorker = 1)
 
   // for ExternalSorter
   val externalSorterInputDirectory: Path = shuffleOutputDir
