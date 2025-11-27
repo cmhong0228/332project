@@ -83,7 +83,7 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
                 )
 
                 pendingRegisterPromises.asScala.foreach { promise =>
-                    promise.success(response)
+                    promise.trySuccess(response)
                 }
                 
                 pendingRegisterPromises.clear()
@@ -181,7 +181,7 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
                 val response = new FileIdMap(map)
 
                 pendingSortTerminationPromises.asScala.foreach { promise =>
-                    promise.success(response)
+                    promise.trySuccess(response)
                 }
 
                 pendingSortTerminationPromises.clear()
@@ -263,7 +263,7 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
                 val response = SamplingRatio(ratio = ratio, isFinished = isCompletedPivots)
                 
                 pendingRecordCountPromises.asScala.foreach { promise =>
-                    promise.success(response)
+                    promise.trySuccess(response)
                 }
 
                 pendingRecordCountPromises.clear()
@@ -312,7 +312,7 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
                 )
                 
                 pendingSamplePromises.asScala.foreach { promise =>
-                    promise.success(response)
+                    promise.trySuccess(response)
                 }
 
                 pendingSamplePromises.clear()
