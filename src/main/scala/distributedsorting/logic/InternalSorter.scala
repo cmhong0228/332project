@@ -147,6 +147,7 @@ trait InternalSorter {
    */
   def runSortAndPartition(): List[Path] = {
     val localExecutor = Executors.newFixedThreadPool(optimalThreadCount)
+    println(s"[InternalSorter] optimalThreadcount: $optimalThreadCount")
   
     implicit val localEc: ExecutionContext = ExecutionContext.fromExecutor(localExecutor)
 
