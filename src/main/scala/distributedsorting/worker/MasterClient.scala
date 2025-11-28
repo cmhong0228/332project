@@ -57,7 +57,7 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
                 // 매 루프마다 rpcCall(Future)을 새로 생성 (by-name parameter)
                 val future = rpcCall 
                 // 10분 대기 (네트워크 지연 고려)
-                result = Some(Await.result(future, 10.minutes)) 
+                result = Some(Await.result(future, Duration.Inf)) 
             } catch {
                 case NonFatal(e) =>
                     println(s"[Worker] $operationName failed. Retrying in 1s... Error: ${e.getMessage}")

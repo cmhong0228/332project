@@ -52,7 +52,7 @@ class MasterApp (numWorkers: Int) extends ShutdownController {
 
     private def stop(): Unit = {
         if (server != null) {
-            server.shutdownNow()
+            server.shutdown()
         }
         System.exit(0)
     }
