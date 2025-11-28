@@ -9,6 +9,9 @@ import scala.collection.mutable.PriorityQueue
 import java.util.concurrent.Executors
 import scala.concurrent.{Future, Await, ExecutionContext}
 import scala.concurrent.duration.Duration
+import java.lang.management.ManagementFactory
+import com.sun.management.UnixOperatingSystemMXBean
+import scala.util.Try
 
 /**
  * 대용량 데이터를 처리하기 위한 외부 정렬(External Sorting) 기능을 정의하는 trait
@@ -74,6 +77,8 @@ trait ExternalSorter {
     val MEMORY_SIZE: Long
     val EXTERNAL_SORT_USABLE_MEMORY_RATIO: Double
     val BUFFER_SIZE: Long
+    val BASIC_MAX_MERGE_FILES: Int
+    val MAX_FILES_RATIO: Double
 
     
     val maxMemory = Runtime.getRuntime.maxMemory()
@@ -81,12 +86,14 @@ trait ExternalSorter {
 
     lazy val totalAvailableBuffers: Int = (safeMemory / BUFFER_SIZE).toInt
 
+    lazy val maxFiles = (getMaxOpenFilesLimit() * MAX_FILES_RATIO).toInt
+
     /**
      * k-way merge 단계에서 한 번에 병합할 수 있는 최대 파일 또는 스트림의 개수(k 값)
      * 이 값은 시스템의 메모리 제한을 고려하여 설정
      * 총 버퍼 수 - 출력 버퍼(1)
      */
-    lazy val numMaxMergeGroup: Int = totalAvailableBuffers - 1
+    lazy val numMaxMergeGroup: Int = math.min(totalAvailableBuffers, maxFiles) - 1
 
     /**
      * 주어진 파일 경로 시퀀스를 최대 `numMaxMergeGroup` 크기의 그룹으로 분할
@@ -162,7 +169,7 @@ trait ExternalSorter {
             
             val memPerThread = safeMemory / threads
             
-            val parallelK = (memPerThread / BUFFER_SIZE).toInt
+            val parallelK = math.max(2, math.min((memPerThread / BUFFER_SIZE).toInt, (maxFiles / threads).toInt) - 1)
             println(s"[ExternalSorter] Multi Pass Merge, k = $parallelK")
             
             (parallelK, threads)
@@ -206,6 +213,23 @@ trait ExternalSorter {
             
         } finally {
             executor.shutdown()
+        }
+    }
+
+    def getMaxOpenFilesLimit(): Long = {
+        val osBean = ManagementFactory.getOperatingSystemMXBean
+        
+        val isWindows = System.getProperty("os.name").toLowerCase.contains("win")
+
+        if (isWindows) {
+            BASIC_MAX_MERGE_FILES
+        } else {
+            osBean match {
+                case unixBean: UnixOperatingSystemMXBean =>
+                    unixBean.getMaxFileDescriptorCount
+                case _ =>
+                    BASIC_MAX_MERGE_FILES
+            }
         }
     }
 

@@ -104,6 +104,8 @@ class WorkerApp (
   val MEMORY_SIZE: Long = config.getBytes(s"$configPath.cluster-info.node-info.memory").toLong
   val EXTERNAL_SORT_USABLE_MEMORY_RATIO: Double = config.getDouble(s"$configPath.external-sort.max-memory-usage-ratio")
   val BUFFER_SIZE: Long = config.getBytes(s"$configPath.io.buffer-size").toLong
+  val BASIC_MAX_MERGE_FILES: Int = config.getInt(s"$configPath.external-sort.basic-max-merge-files")
+  val MAX_FILES_RATIO: Double = config.getDouble(s"$configPath.external-sort.max-files-ratio")
   override lazy val externalSorterWorkerId = workerId
 
   def run(): Unit = {
