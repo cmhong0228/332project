@@ -3,7 +3,7 @@ package distributedsorting.worker
 import distributedsorting.distributedsorting._
 import distributedsorting.logic._
 import java.nio.file.Path
-import io.grpc.{ManagedChannel, ManagedChannelBuilder}
+import io.grpc.{ManagedChannel, ManagedChannelBuilder, Status, StatusRuntimeException}
 import distributedsorting.distributedsorting.MasterServiceGrpc.MasterServiceStub
 import com.google.protobuf.ByteString
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -49,19 +49,30 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
      * - 실패 시 1초 대기 후 무한 재시도
      * - 성공할 때까지 블로킹
      */
-    private def callWithRetry[T](rpcCall: => Future[T], operationName: String): T = {
+    private def callWithRetry[T](
+    rpcCall: => Future[T], 
+    operationName: String, 
+    onMasterShutdown: Option[T] = None 
+    ): T = {
         var result: Option[T] = None
         
         while (result.isEmpty) {
             try {
-                // 매 루프마다 rpcCall(Future)을 새로 생성 (by-name parameter)
                 val future = rpcCall 
-                // 10분 대기 (네트워크 지연 고려)
                 result = Some(Await.result(future, Duration.Inf)) 
             } catch {
+                case e: StatusRuntimeException if e.getStatus.getCode == Status.Code.UNAVAILABLE =>
+                    if (onMasterShutdown.isDefined) {
+                        println(s"[Worker] $operationName: Master unavailable (likely shutdown). Using fallback value.")
+                        return onMasterShutdown.get
+                    }
+                    
+                    println(s"[Worker] $operationName failed (Master unavailable). Retrying in 1s...")
+                    Thread.sleep(1000)
+
                 case NonFatal(e) =>
                     println(s"[Worker] $operationName failed. Retrying in 1s... Error: ${e.getMessage}")
-                    Thread.sleep(1000) // 1초 대기 후 재시도
+                    Thread.sleep(1000)
             }
         }
         result.get
@@ -91,9 +102,11 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
     // ======================= Termination =======================
     def reportCompletion(): Unit = {
         val completionReport = new CompletionRequest(Some(workerInfo), calculateTotalRecords(Seq(outputDir)))
+        val fakeSuccessResponse = CompletionResponse(success = true)
         val response = callWithRetry(
             masterClient.reportCompletion(completionReport),
-            "ReportCompletion"
+            "ReportCompletion",
+            onMasterShutdown = Some(fakeSuccessResponse)
         )
         
         if (response.success) {
