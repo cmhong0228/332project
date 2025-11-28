@@ -4,6 +4,9 @@ import java.nio.file.{Files, Path}
 import scala.util.{Try, Success, Failure}
 import scala.jdk.CollectionConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.{Future, Await, ExecutionContext}
+import scala.concurrent.duration.Duration
+import java.util.concurrent.Executors
 
 
 import distributedsorting.distributedsorting.{Record, Key}
@@ -26,6 +29,20 @@ trait InternalSorter {
   val internalSortWorkerId : Int
 
   val internalSorterOutputDirectory : Path
+
+  val INTERNAL_SORT_USABLE_MEMORY_RATIO: Double
+  val numCores = Runtime.getRuntime.availableProcessors()
+  val maxHeapSize = Runtime.getRuntime.maxMemory()
+  val safeMemoryLimit = (maxHeapSize * INTERNAL_SORT_USABLE_MEMORY_RATIO).toLong
+  val maxFileSize: Long = filePath.map { x =>
+    Files.size(x)
+  }.max
+  val memoryBasedThreadLimit = if (maxFileSize > 0) {
+    (safeMemoryLimit / maxFileSize).toInt
+  } else {
+    numCores
+  }
+  val optimalThreadCount = math.max(1, math.min(numCores, memoryBasedThreadLimit))
 
 
   // --- 유틸리티 함수 정의 ---
@@ -129,44 +146,42 @@ trait InternalSorter {
    * 주 실행 로직: 입력 파일을 정렬하고, 배치 함수를 호출합니다.
    */
   def runSortAndPartition(): List[Path] = {
+    val localExecutor = Executors.newFixedThreadPool(optimalThreadCount)
+  
+    implicit val localEc: ExecutionContext = ExecutionContext.fromExecutor(localExecutor)
 
-    // 각 파티션별 최종 파일 경로 목록 (saveFile의 outputPath 인수로 전달될 값)
-    // madeFile(numOfPar, internalSorterOutputDirectory)가 되어야 하지만,
-    // 파일 index(k)를 계산해야 하므로 구체적인 구현 클래스에서 처리해야 함.
+    try {
+      val futureFiles: Seq[Future[List[Path]]] = (0 until filePiece).map { x =>
+        Future {
+          val inputPath = filePath(x)
+          
+          val sortedRecords: List[Record] = {
+            val fileIterator = new FileRecordIterator(inputPath)
+            try {
+              fileIterator.toList.sorted(ordering)
+            } finally {
+              fileIterator.close()
+            }
+          }
 
-    var allPartitionedFiles: List[Path] = List.empty
+          val outputPaths: List[Path] = madeFile(x)
+          val partitionResult = partition(sortedRecords)
 
-    for (x <- 0 until filePiece) {
-      val inputPath = filePath(x)
+          saveFile(partitionResult, outputPaths)
 
-      // 1. Initialize Iterator safely
-      // FileRecordIterator는 같은 패키지에 정의되어 있으므로 사용 가능
-      val fileIterator = new FileRecordIterator(inputPath)
-
-      // 2. Read, ToList, and Sort within a try-finally for resource safety
-      val sortedRecords: List[Record] = try {
-
-        val newSort = fileIterator.toList.sorted(ordering)
-
-        // Record는 다른 scala 파일에서 만들어진 디렉터리의 데이터
-        // 주어진 파일경로(recordIterator in record-io)에서 이터레이터로 바꾼 다음에 .toList로 리스트화
-        newSort
-      } finally {
-        // Must close the iterator to release file handles
-        fileIterator.close()
+          outputPaths 
+        }
       }
 
-      val outputPaths: List[Path] = madeFile(x)
+      val aggregatedFuture: Future[Seq[List[Path]]] = Future.sequence(futureFiles)
 
-      // 3. 정렬된 레코드를 배치 partition 함수에 전달
-      val partitionResult = partition(sortedRecords)
+      val allFilesSeq: Seq[List[Path]] = Await.result(aggregatedFuture, Duration.Inf)
+      
+      allFilesSeq.flatten.toList
 
-      // 4. 파티션 결과를 파일에 저장
-      saveFile(partitionResult, outputPaths)
-
-      // saveFile이 Unit을 반환하므로, 여기서는 outputPaths를 반환하는 방식으로 처리
-      allPartitionedFiles ++= outputPaths
+    } finally {
+      localExecutor.shutdown()
+      println("[InternalSorter] Thread Pool Shutdown.")
     }
-    allPartitionedFiles
   }
 }
