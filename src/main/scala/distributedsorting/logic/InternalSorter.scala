@@ -33,7 +33,7 @@ trait InternalSorter {
   val INTERNAL_SORT_USABLE_MEMORY_RATIO: Double
   val numCores = Runtime.getRuntime.availableProcessors()
   val maxHeapSize = Runtime.getRuntime.maxMemory()
-  val safeMemoryLimit = (maxHeapSize * INTERNAL_SORT_USABLE_MEMORY_RATIO).toLong
+  lazy val safeMemoryLimit = (maxHeapSize * INTERNAL_SORT_USABLE_MEMORY_RATIO).toLong
   lazy val maxFileSize: Long = filePath.map { x =>
     Files.size(x)
   }.max
