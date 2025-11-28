@@ -73,6 +73,10 @@ class WorkerApp (
 
   var pivots: Vector[Record] = _
 
+  // for sampling
+  val useSimpleSampling = config.getBoolean(s"$configPath.sampling-control.use-simple-sampling")
+  override val simpleSamplingRecords = config.getInt(s"$configPath.sampling-control.simple-sampling-records")
+
   // for InternalSorter
   override val internalSorterDirectories = inputDirs
   override val ordering = createRecordOrdering(KEY_SIZE, RECORD_SIZE)
@@ -114,7 +118,13 @@ class WorkerApp (
     println("=================================")
 
     // Sampling
-    pivots = executeSampling(inputDirs)
+    pivots = {
+      if (useSimpleSampling) {
+        executeSimpleSampling(inputDirs)
+      } else {
+        executeSampling(inputDirs)
+      }
+    }
     println(s"pivots: $pivots")
     println("finish sampling phase")
 

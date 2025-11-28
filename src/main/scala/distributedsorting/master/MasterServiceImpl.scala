@@ -225,7 +225,14 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
     // 머신 마다 넘지 않도록 설계한 바이트 수
     //val MAX_BYTES_PER_MACHINE_DESIGNED: Long = ???
     // 정렬 시 사용할 ordering
-    val ordering: Ordering[Key] = createRecordOrdering(KEY_SIZE, KEY_SIZE)
+    val useSimpleSampling = config.getBoolean(s"$configPath.sampling-control.use-simple-sampling")
+    val ordering: Ordering[Key] = {
+        if (useSimpleSampling) {
+            createRecordOrdering(KEY_SIZE, RECORD_SIZE)
+        } else {
+            createRecordOrdering(KEY_SIZE, KEY_SIZE)
+        }
+    }
 
     private val totalRecordSum = new AtomicLong(0)
     private val pendingRecordCountPromises = new CopyOnWriteArrayList[Promise[SamplingRatio]]()
@@ -313,6 +320,55 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
                 
                 pendingSamplePromises.asScala.foreach { promise =>
                     promise.trySuccess(response)
+                }
+
+                pendingSamplePromises.clear()
+            }
+        }
+        myPromise.future
+    }
+
+    /**
+     * [RPC 메서드] Worker가 로컬에서 샘플링한 Key 리스트를 Master에게 보낼 때 호출
+     * * Master는 모든 Worker의 샘플을 통합한 후, PivotSelector의 SortSamples와 selectPivots을 호출하여
+     * 파티셔닝 경계 키를 결정
+     * @param request SampleKeyList (Worker ID 및 샘플링된 Key 리스트 포함)
+     * @return SampleDecision (계산된 최종 Pivot Key 리스트를 Worker에게 전송)
+     */
+    override def sendSimpleSampleKeys(request: SampleKeyList): Future[SampleDecision] = {
+        val myPromise = Promise[SampleDecision]()
+        val workerId = request.workerId
+        val index = workerId - 1
+
+        this.synchronized {
+            pendingSamplePromises.add(myPromise)
+        
+            if (!sampledWorkers(index)) {
+                val keysFromWorker: Seq[Record] = request.keys.map(_.value.toByteArray)
+                allSamples.addAll(keysFromWorker.asJava)            
+                sampledWorkers(index) = true
+            }
+            
+            if (sampledWorkers.forall(_ ==  true)) {
+                if (!isCompletedPivots) {
+                    val aggregatedKeys: Seq[Record] = allSamples.asScala.toSeq
+                    val sortedKeys = sortSamples(aggregatedKeys)
+                    val pivotKeys: Vector[Record] = selectPivots(sortedKeys)
+                    pivots = pivotKeys
+                    isCompletedPivots = true     
+                }
+                
+                val protoPivots: Seq[KeyMessage] = pivots.map { keyArray =>
+                    KeyMessage(value = ByteString.copyFrom(keyArray))
+                }
+                val partitionInfo = PartitionInfo(pivots = protoPivots)
+                val response = SampleDecision(
+                    proceed = true,
+                    content = SampleDecision.Content.PartitionInfo(partitionInfo)
+                )
+                
+                pendingSamplePromises.asScala.foreach { promise =>
+                    promise.success(response)
                 }
 
                 pendingSamplePromises.clear()

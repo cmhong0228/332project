@@ -95,25 +95,7 @@ trait RecordExtractor { self: Sampler =>
      * @return 추출된 Key 객체의 리스트 (Seq[Key])
      */
     def readAndExtractSamples(inputDirs: Seq[Path], samplingRatio: Double): Seq[Key] = {
-        val allFilePaths: Seq[Path] = inputDirs.flatMap { dirPath =>
-            try {
-                if (Files.isDirectory(dirPath)) {
-                    val stream = Files.walk(dirPath, 1) // 1단계 깊이만 탐색
-                    try {
-                        stream.iterator().asScala
-                            .filter(path => path != dirPath && Files.isRegularFile(path))
-                            .toSeq // 스트림을 닫기 위해 즉시 Seq로 변환
-                    } finally {
-                        stream.close()
-                    }
-                } else {
-                    Seq.empty[Path] // 디렉터리가 아니면 무시
-                }
-            } catch {
-                case e: IOException =>
-                    Seq.empty[Path] // 접근 불가 시 무시
-            }
-        }
+        val allFilePaths: Seq[Path] = getAllFilePaths(inputDirs)
 
         val allSamples: Seq[Key] = allFilePaths.flatMap { filePath =>
             val iterator = new FileRecordIterator(filePath)
@@ -125,6 +107,26 @@ trait RecordExtractor { self: Sampler =>
         }
 
         allSamples
+    }
+
+    def getAllFilePaths(inputDirs: Seq[Path]): Seq[Path] = inputDirs.flatMap { dirPath =>
+        try {
+            if (Files.isDirectory(dirPath)) {
+                val stream = Files.walk(dirPath, 1) // 1단계 깊이만 탐색
+                try {
+                    stream.iterator().asScala
+                        .filter(path => path != dirPath && Files.isRegularFile(path))
+                        .toSeq // 스트림을 닫기 위해 즉시 Seq로 변환
+                } finally {
+                    stream.close()
+                }
+            } else {
+                Seq.empty[Path] // 디렉터리가 아니면 무시
+            }
+        } catch {
+            case e: IOException =>
+                Seq.empty[Path] // 접근 불가 시 무시
+        }
     }
 }
     

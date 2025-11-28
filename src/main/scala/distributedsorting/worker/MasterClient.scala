@@ -11,6 +11,7 @@ import scala.concurrent.duration._
 import scala.util.control.NonFatal
 import scala.util.{Try, Success, Failure}
 import distributedsorting.worker.TestHelpers.FileStructure
+import scala.collection.mutable.ListBuffer
 
 trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampler {
     implicit val ec: ExecutionContext
@@ -27,6 +28,8 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
     lazy val inputRecords = calculateTotalRecords(inputDirs)
     lazy val workerRegisterInfo: WorkerRegisterInfo = new WorkerRegisterInfo(ip = workerIp, port = workerPort, paths = workerInputPaths, numRecords = inputRecords)
     
+    val simpleSamplingRecords: Int
+
     private lazy val channel: ManagedChannel = ManagedChannelBuilder.forAddress(masterIp, masterPort)
       .usePlaintext()
       .build()
@@ -179,4 +182,53 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
                 throw new RuntimeException("Master returned empty decision.")
         }
     }
+
+    def executeSimpleSampling(inputDirs: Seq[Path]): Vector[Record] = {
+        val allFilePaths: Seq[Path] = getAllFilePaths(inputDirs)
+
+        var numCurrentSamples = 0
+        val collectedSamples = ListBuffer[Record]()
+        for (filePath <- allFilePaths if numCurrentSamples < simpleSamplingRecords) {  
+            val iterator = new FileRecordIterator(filePath)            
+            try {
+                while (iterator.hasNext && numCurrentSamples < simpleSamplingRecords) {
+                val record = iterator.next()
+                
+                collectedSamples += record
+                numCurrentSamples += 1
+                }
+            } finally {
+                iterator.close()
+            }
+        }
+
+        val protoKeys: Seq[KeyMessage] = collectedSamples.map { keyArray =>
+            KeyMessage(value = ByteString.copyFrom(keyArray))
+        }.toSeq
+
+        val sampleList = SampleKeyList(
+            workerId = workerInfo.workerId,
+            keys = protoKeys
+        )
+
+        val decision = callWithRetry(
+            masterClient.sendSimpleSampleKeys(sampleList),
+            "SendSampleKeys"
+        )
+
+        decision.content match {
+            case SampleDecision.Content.PartitionInfo(partitionInfo) =>
+                val pivots: Vector[Record] = partitionInfo.pivots.map { keyMsg =>
+                    keyMsg.value.toByteArray
+                }.toVector
+                pivots
+
+            case SampleDecision.Content.Control(control) =>
+                throw new RuntimeException(s"Re-sampling requested but not implemented.")
+            
+            case SampleDecision.Content.Empty =>
+                throw new RuntimeException("Master returned empty decision.")
+        }
+    }
+
 }
