@@ -6,6 +6,9 @@ import java.io.{File, IOException}
 import java.util.Comparator
 import scala.jdk.CollectionConverters._
 import scala.collection.mutable.PriorityQueue
+import java.util.concurrent.Executors
+import scala.concurrent.{Future, Await, ExecutionContext}
+import scala.concurrent.duration.Duration
 
 /**
  * 대용량 데이터를 처리하기 위한 외부 정렬(External Sorting) 기능을 정의하는 trait
@@ -72,8 +75,11 @@ trait ExternalSorter {
     val EXTERNAL_SORT_USABLE_MEMORY_RATIO: Double
     val BUFFER_SIZE: Long
 
-    lazy val totalUsableMemory: Double = MEMORY_SIZE * EXTERNAL_SORT_USABLE_MEMORY_RATIO
-    lazy val totalAvailableBuffers: Int = (totalUsableMemory / BUFFER_SIZE).toInt
+    
+    val maxMemory = Runtime.getRuntime.maxMemory()
+    lazy val safeMemory = (maxMemory * EXTERNAL_SORT_USABLE_MEMORY_RATIO).toLong
+
+    lazy val totalAvailableBuffers: Int = (safeMemory / BUFFER_SIZE).toInt
 
     /**
      * k-way merge 단계에서 한 번에 병합할 수 있는 최대 파일 또는 스트림의 개수(k 값)
@@ -144,43 +150,61 @@ trait ExternalSorter {
      */
     def merge(fileSeq: Seq[Path]): Path = {
         require(fileSeq.nonEmpty)
+        val totalFiles = fileSeq.size
         
+        val maxSingleK = numMaxMergeGroup
+
+        val (optimalK, threadCount) = if (totalFiles <= maxSingleK) {
+            (totalFiles, 1)
+        } else {
+            val threads = Runtime.getRuntime.availableProcessors()
+            
+            val memPerThread = safeMemory / threads
+            
+            val parallelK = (memPerThread / BUFFER_SIZE).toInt
+            
+            (parallelK, threads)
+        }
+
+        val executor = Executors.newFixedThreadPool(threadCount)
+        implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(executor)
+
         var currentFiles = fileSeq
         var pass = 0
 
-        // (1) 파일이 1개가 될 때까지 다단계 병합(Multi-pass merge) 수행
-        while (currentFiles.size > 1) {
-            pass += 1
-            val groups: Seq[Seq[Path]] = splitGroup(currentFiles)
+        try {
+            while (currentFiles.size > 1) {
+                pass += 1
+                val groups: Seq[Seq[Path]] = currentFiles.grouped(optimalK).toSeq
 
-            // (2) 각 그룹을 병합
-            //     (순차적 .map 사용. 성능을 위해 .par.map으로 변경 가능)
-            currentFiles = groups.map { group =>
-                // (3) 이 그룹의 병합 결과를 저장할 임시 파일 경로
-                val tempOutPath = externalSorterTempDirectory.resolve(s"pass-$pass-group-${group.head.hashCode}.bin")
-                
-                // (4) 리소스 관리를 위한 FileRecordIterator 시퀀스
-                var iterators: Seq[FileRecordIterator] = null 
-                try {
-                    // (5) 각 파일에 대한 이터레이터 생성
-                    iterators = group.map(path => new FileRecordIterator(path, recordSize = RECORD_SIZE))
-                    
-                    // (6) k-way merge 수행
-                    val mergedIter = iteratorMerge(iterators)
-                    
-                    // (7) 병합된 결과를 임시 파일에 씀
-                    RecordWriterRunner.WriteRecordIterator(tempOutPath, mergedIter)
-                } finally {
-                    // (8) (필수) 이 그룹에서 사용된 모든 파일 이터레이터를 닫음
-                    if (iterators != null) {
-                        iterators.foreach(_.close())
+                val futures = groups.map { group =>
+                    Future {
+                        val tempOutPath = externalSorterTempDirectory.resolve(
+                            s"pass-$pass-group-${group.head.hashCode}-${System.nanoTime()}.bin"
+                        )
+
+                        var iterators: Seq[FileRecordIterator] = null
+                        try {
+                            iterators = group.map(path => new FileRecordIterator(path))
+
+                            val mergedIter = iteratorMerge(iterators)
+
+                            RecordWriterRunner.WriteRecordIterator(tempOutPath, mergedIter)
+
+                            tempOutPath
+                        } finally {
+                            if (iterators != null) iterators.foreach(_.close())
+                        }
                     }
                 }
-                tempOutPath // 다음 패스(pass)의 입력 파일이 될 경로
+                currentFiles = Await.result(Future.sequence(futures), Duration.Inf)
             }
+            
+            currentFiles.head
+            
+        } finally {
+            executor.shutdown()
         }
-
-        currentFiles.head
     }
 
     /**
