@@ -79,6 +79,7 @@ trait ExternalSorter {
     val BUFFER_SIZE: Long
     val BASIC_MAX_MERGE_FILES: Int
     val MAX_FILES_RATIO: Double
+    val MAX_FILES_ABSOLUTE_LIMIT: Int
 
     
     val maxMemory = Runtime.getRuntime.maxMemory()
@@ -221,14 +222,16 @@ trait ExternalSorter {
         
         val isWindows = System.getProperty("os.name").toLowerCase.contains("win")
 
+        val basic = math.min(BASIC_MAX_MERGE_FILES, MAX_FILES_ABSOLUTE_LIMIT)
+
         if (isWindows) {
-            BASIC_MAX_MERGE_FILES
+            basic
         } else {
             osBean match {
                 case unixBean: UnixOperatingSystemMXBean =>
-                    unixBean.getMaxFileDescriptorCount
+                    math.min(unixBean.getMaxFileDescriptorCount, MAX_FILES_ABSOLUTE_LIMIT)
                 case _ =>
-                    BASIC_MAX_MERGE_FILES
+                    basic
             }
         }
     }
