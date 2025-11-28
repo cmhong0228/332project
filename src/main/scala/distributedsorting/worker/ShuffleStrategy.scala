@@ -240,3 +240,71 @@ class PerWorkerShuffleStrategy(filesPerWorker: Int = 1) extends ShuffleStrategy 
         totalSuccess
     }
 }
+
+class IndependentWorkerShuffleStrategy(filesPerWorker: Int = 1) extends ShuffleStrategy {
+  override def execute(
+    neededFiles: mutable.Set[FileId],
+    shuffleOutputDir: Path,
+    fileTransport: FileTransport
+  ): Int = {
+    import scala.concurrent.{Future, Await, ExecutionContext}
+    import scala.concurrent.duration._
+    
+    val ioExecutor = java.util.concurrent.Executors.newCachedThreadPool()
+    implicit val ioEc: ExecutionContext = ExecutionContext.fromExecutor(ioExecutor)
+
+    try {
+      val fileList = neededFiles.toList
+      val filesBySourceWorker = fileList.groupBy(_.sourceWorkerId)
+      val numWorkers = filesBySourceWorker.keys.size
+
+      println(s"[IndependentWorkerStrategy] Shuffling ${fileList.size} files from $numWorkers workers")
+      val startTime = System.currentTimeMillis()
+
+      val workerTasks: Iterable[Future[Int]] = filesBySourceWorker.map { case (workerId, files) =>
+          Future {
+            println(s"[Independent] -> Worker $workerId: Total ${files.size} files to download")
+
+            var successCount = 0
+            // 배치 처리
+            val chunks = files.grouped(filesPerWorker)
+
+            chunks.foreach { batch =>
+                val batchFutures = batch.map { fileId =>
+                    Future {
+                        val destPath = shuffleOutputDir.resolve(fileId.toFileName)
+                        val result = fileTransport.requestFile(fileId, destPath)
+                        if (!result) println(s"[Fail] $fileId")
+                        result
+                    }
+                }
+                // 배치 대기
+                val batchResults = Await.result(Future.sequence(batchFutures), Duration.Inf)
+                successCount += batchResults.count(_ == true)
+            }
+            println(s"[Independent] <- Worker $workerId Finished: $successCount/${files.size}")
+            successCount
+          }
+      }
+
+      println("[IndependentWorkerStrategy] Waiting for all workers to finish...")
+      
+      val allWorkerResults = Await.result(Future.sequence(workerTasks), Duration.Inf)
+      
+      val totalSuccess = allWorkerResults.sum
+      val totalTime = System.currentTimeMillis() - startTime
+      
+      println(s"[IndependentWorkerStrategy] Complete: $totalSuccess/${fileList.size} files succeeded in ${totalTime}ms")
+      totalSuccess
+
+    } catch {
+      case e: Exception =>
+        println(s"[IndependentWorkerStrategy] Error during shuffle: ${e.getMessage}")
+        e.printStackTrace()
+        0
+    } finally {
+      ioExecutor.shutdown() 
+      println("[IndependentWorkerStrategy] IO Thread Pool Shutdown.")
+    }
+  }
+}

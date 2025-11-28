@@ -89,8 +89,9 @@ class WorkerApp (
   // for shuffle
   // Sequential: 안정적이지만 느림 (1개씩 순차)
   // LimitedConcurrency: 빠름 (10개씩 배치)
-  // PerWorker: 각 워커당 1개씩 동시 다운로드 (워커 개수만큼 병렬, 균형적)
-  val shuffleStrategy = new PerWorkerShuffleStrategy(filesPerWorker = 1)
+  // PerWorker: 각 워커당 1개씩 동시 다운로드 (워커 개수만큼 병렬, 균형적) 파일 1개 마다 wait
+  // IndependentWorkerShuffleStrategy: 각 워커당 동시 다운로드, 전체 작업 끝날때 wait
+  val shuffleStrategy = new IndependentWorkerShuffleStrategy(filesPerWorker = 1)
 
   // for ExternalSorter
   val externalSorterInputDirectory: Path = shuffleOutputDir
