@@ -87,7 +87,10 @@ class WorkerApp (
   override val INTERNAL_SORT_USABLE_MEMORY_RATIO = config.getDouble(s"$configPath.internal-sort.max-memory-usage-ratio")
 
   // for shuffle
-  val shuffleStrategy = new SequentialShuffleStrategy()
+  // Sequential: 안정적이지만 느림 (1개씩 순차)
+  // LimitedConcurrency: 빠름 (10개씩 배치)
+  // PerWorker: 각 워커당 1개씩 동시 다운로드 (워커 개수만큼 병렬, 균형적)
+  val shuffleStrategy = new PerWorkerShuffleStrategy(filesPerWorker = 1)
 
   // for ExternalSorter
   val externalSorterInputDirectory: Path = shuffleOutputDir

@@ -88,22 +88,25 @@ class RemoteFileTransport(
                     false
             }
         } else {
-            // 다른 워커에게 요청하는 경우: gRPC streaming 사용
+            // 다른 워커에게 요청하는 경우: gRPC streaming 사용 (디스크 직접 저장)
             shuffleClient match {
                 case Some(client) =>
                     try {
-                        // gRPC streaming을 통해 파일 데이터 요청
-                        val dataFuture = client.requestFileStream(fileId)
+                        // gRPC streaming을 통해 파일을 바로 디스크에 저장
+                        // 청크를 받자마자 디스크에 쓰므로 메모리 사용 최소화
+                        val successFuture = client.requestFileStreamToDisk(fileId, destPath)
 
-                        // Future를 블로킹하여 결과 대기 (최대 60초 - streaming은 더 오래 걸릴 수 있음)
-                        val data = Await.result(dataFuture, 60.seconds)
+                        // Future를 블로킹하여 결과 대기 (최대 120초 - 대용량 파일 고려)
+                        val success = Await.result(successFuture, 120.seconds)
 
-                        // 파일 저장
-                        Files.createDirectories(destPath.getParent)
-                        Files.write(destPath, data)
+                        if (success) {
+                            val fileSize = Files.size(destPath)
+                            println(s"[RemoteFileTransport $workerId] Successfully saved ${fileId.toFileName} (${fileSize} bytes)")
+                        } else {
+                            println(s"[RemoteFileTransport $workerId] Failed to save ${fileId.toFileName}")
+                        }
 
-                        println(s"[RemoteFileTransport $workerId] Successfully saved ${fileId.toFileName} (${data.length} bytes)")
-                        true
+                        success
                     } catch {
                         case e: Exception =>
                             try {
