@@ -155,6 +155,7 @@ trait ExternalSorter {
         val maxSingleK = numMaxMergeGroup
 
         val (optimalK, threadCount) = if (totalFiles <= maxSingleK) {
+            println(s"[ExternalSorter] Single Pass Merge")
             (totalFiles, 1)
         } else {
             val threads = Runtime.getRuntime.availableProcessors()
@@ -162,6 +163,7 @@ trait ExternalSorter {
             val memPerThread = safeMemory / threads
             
             val parallelK = (memPerThread / BUFFER_SIZE).toInt
+            println(s"[ExternalSorter] Multi Pass Merge, k = $parallelK")
             
             (parallelK, threads)
         }
