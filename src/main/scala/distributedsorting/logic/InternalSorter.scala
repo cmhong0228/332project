@@ -34,15 +34,15 @@ trait InternalSorter {
   val numCores = Runtime.getRuntime.availableProcessors()
   val maxHeapSize = Runtime.getRuntime.maxMemory()
   val safeMemoryLimit = (maxHeapSize * INTERNAL_SORT_USABLE_MEMORY_RATIO).toLong
-  val maxFileSize: Long = filePath.map { x =>
+  lazy val maxFileSize: Long = filePath.map { x =>
     Files.size(x)
   }.max
-  val memoryBasedThreadLimit = if (maxFileSize > 0) {
+  lazy val memoryBasedThreadLimit = if (maxFileSize > 0) {
     (safeMemoryLimit / maxFileSize).toInt
   } else {
     numCores
   }
-  val optimalThreadCount = math.max(1, math.min(numCores, memoryBasedThreadLimit))
+  lazy val optimalThreadCount = math.max(1, math.min(numCores, memoryBasedThreadLimit))
 
 
   // --- 유틸리티 함수 정의 ---
