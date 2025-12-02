@@ -7,6 +7,7 @@ import scala.concurrent.duration._
 import scala.util.{Try, Success, Failure}
 import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters._
+import com.typesafe.scalalogging.LazyLogging
 
 /**
  * gRPC를 이용한 원격 파일 전송 구현
@@ -19,7 +20,7 @@ class RemoteFileTransport(
     val workerId: Int,
     val partitionDir: Path,
     val workerAddresses: Map[Int, String]
-)(implicit ec: ExecutionContext) extends FileTransport {
+)(implicit ec: ExecutionContext) extends FileTransport with LazyLogging {
 
     private var workerService: Option[WorkerServiceImpl] = None
     private var shuffleClient: Option[ShuffleClient] = None
@@ -39,7 +40,7 @@ class RemoteFileTransport(
         val client = ShuffleClient(workerAddresses)
         shuffleClient = Some(client)
 
-        // println(s"[RemoteFileTransport $workerId] Initialized (port: $port)")
+        // logger.info(s"[RemoteFileTransport $workerId] Initialized (port: $port)")
     }
 
     /**
@@ -51,7 +52,7 @@ class RemoteFileTransport(
      * @return 성공 여부
      */
     override def requestFile(fileId: FileId, destPath: Path): Boolean = {
-        println(s"[RemoteFileTransport $workerId] Requesting ${fileId.toFileName} from Worker ${fileId.sourceWorkerId}")
+        logger.info(s"[RemoteFileTransport $workerId] Requesting ${fileId.toFileName} from Worker ${fileId.sourceWorkerId}")
 
         if (Files.exists(destPath)) { // 이미 저장되어 있는 경우
             true
@@ -59,13 +60,13 @@ class RemoteFileTransport(
             false
         } else if (fileId.sourceWorkerId == workerId) {
             // 자기 자신에게 요청하는 경우: gRPC 거치지 않고 직접 파일 복사
-            println(s"[RemoteFileTransport $workerId] Self-request detected, copying directly")
+            logger.info(s"[RemoteFileTransport $workerId] Self-request detected, copying directly")
 
             try {
                 val sourcePath = partitionDir.resolve(fileId.toFileName)
 
                 if (!Files.exists(sourcePath)) {
-                    println(s"[RemoteFileTransport $workerId] Source file not found: ${fileId.toFileName}")
+                    logger.info(s"[RemoteFileTransport $workerId] Source file not found: ${fileId.toFileName}")
                     return false
                 }
 
@@ -74,16 +75,16 @@ class RemoteFileTransport(
                 Files.copy(sourcePath, destPath, StandardCopyOption.REPLACE_EXISTING)
 
                 val fileSize = Files.size(destPath)
-                println(s"[RemoteFileTransport $workerId] Successfully copied ${fileId.toFileName} ($fileSize bytes)")
+                logger.info(s"[RemoteFileTransport $workerId] Successfully copied ${fileId.toFileName} ($fileSize bytes)")
                 true
             } catch {
                 case e: Exception =>
                     try {
                         Files.deleteIfExists(destPath)
                     } catch {
-                        case deleteEx: Exception => println("Failed to delete corrupted file")
+                        case deleteEx: Exception => logger.info("Failed to delete corrupted file")
                     }
-                    println(s"[RemoteFileTransport $workerId] Failed to copy ${fileId.toFileName}: ${e.getMessage}")
+                    logger.info(s"[RemoteFileTransport $workerId] Failed to copy ${fileId.toFileName}: ${e.getMessage}")
                     e.printStackTrace()
                     false
             }
@@ -101,9 +102,9 @@ class RemoteFileTransport(
 
                         if (success) {
                             val fileSize = Files.size(destPath)
-                            println(s"[RemoteFileTransport $workerId] Successfully saved ${fileId.toFileName} (${fileSize} bytes)")
+                            logger.info(s"[RemoteFileTransport $workerId] Successfully saved ${fileId.toFileName} (${fileSize} bytes)")
                         } else {
-                            println(s"[RemoteFileTransport $workerId] Failed to save ${fileId.toFileName}")
+                            logger.info(s"[RemoteFileTransport $workerId] Failed to save ${fileId.toFileName}")
                         }
 
                         success
@@ -112,16 +113,16 @@ class RemoteFileTransport(
                             try {
                                 Files.deleteIfExists(destPath)
                             } catch {
-                                case deleteEx: Exception => println("Failed to delete corrupted file")
+                                case deleteEx: Exception => logger.info("Failed to delete corrupted file")
                             }
-                            println(s"[RemoteFileTransport $workerId] Failed to request ${fileId.toFileName}: ${e.getMessage}")
+                            logger.info(s"[RemoteFileTransport $workerId] Failed to request ${fileId.toFileName}: ${e.getMessage}")
                             e.printStackTrace()
                             failedWorkerSet.add(fileId.sourceWorkerId)
                             false
                     }
 
                 case None =>
-                    println(s"[RemoteFileTransport $workerId] ShuffleClient not initialized")
+                    logger.info(s"[RemoteFileTransport $workerId] ShuffleClient not initialized")
                     failedWorkerSet.add(fileId.sourceWorkerId)
                     false
             }
@@ -137,7 +138,7 @@ class RemoteFileTransport(
     override def serveFile(fileId: FileId): Any = {
         // gRPC 서버(WorkerServiceImpl)가 자동으로 처리
         // 이 메서드는 호출되지 않음
-        println(s"[RemoteFileTransport $workerId] serveFile called (handled by gRPC server)")
+        logger.info(s"[RemoteFileTransport $workerId] serveFile called (handled by gRPC server)")
         ()
     }
 
@@ -147,7 +148,7 @@ class RemoteFileTransport(
     override def close(): Unit = {
         shuffleClient.foreach(_.shutdown())
         //workerService.foreach(_.shutdown())
-        println(s"[RemoteFileTransport $workerId] Closed")
+        logger.info(s"[RemoteFileTransport $workerId] Closed")
     }
 }
 

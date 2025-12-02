@@ -11,6 +11,7 @@ import scala.jdk.CollectionConverters._
 import com.google.protobuf.ByteString
 import io.grpc.Context
 import java.util.concurrent.Executors
+import com.typesafe.scalalogging.LazyLogging
 
 // master를 종료 시키기 위한 trait
 trait ShutdownController {
@@ -18,7 +19,7 @@ trait ShutdownController {
     def signalShutdown(): Unit
 }
 
-class MasterServiceImpl(val numWorkers: Int, private val shutdownController: ShutdownController)(implicit ec: ExecutionContext) extends MasterServiceGrpc.MasterService with SamplingPolicy with PivotSelector{
+class MasterServiceImpl(val numWorkers: Int, private val shutdownController: ShutdownController)(implicit ec: ExecutionContext) extends MasterServiceGrpc.MasterService with SamplingPolicy with PivotSelector with LazyLogging {
     private val config = ConfigFactory.load()
     private val configPath = "distributedsorting"
 
@@ -90,7 +91,7 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
 
                 if (!isCollectedAllWorkers) {
                     val workerIps = allWorkersSeq.map(_.ip).mkString(", ")
-                    println(workerIps)
+                    logger.info(workerIps)
                     isCollectedAllWorkers = true
                 }                
             }

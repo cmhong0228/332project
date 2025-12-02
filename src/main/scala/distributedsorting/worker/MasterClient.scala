@@ -12,8 +12,9 @@ import scala.util.control.NonFatal
 import scala.util.{Try, Success, Failure}
 import distributedsorting.worker.TestHelpers.FileStructure
 import scala.collection.mutable.ListBuffer
+import com.typesafe.scalalogging.LazyLogging
 
-trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampler {
+trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampler with LazyLogging {
     implicit val ec: ExecutionContext
     
     val masterIp: String
@@ -63,15 +64,15 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
             } catch {
                 case e: StatusRuntimeException if e.getStatus.getCode == Status.Code.UNAVAILABLE =>
                     if (onMasterShutdown.isDefined) {
-                        println(s"[Worker] $operationName: Master unavailable (likely shutdown). Using fallback value.")
+                        logger.info(s"[Worker] $operationName: Master unavailable (likely shutdown). Using fallback value.")
                         return onMasterShutdown.get
                     }
                     
-                    println(s"[Worker] $operationName failed (Master unavailable). Retrying in 1s...")
+                    logger.info(s"[Worker] $operationName failed (Master unavailable). Retrying in 1s...")
                     Thread.sleep(1000)
 
                 case NonFatal(e) =>
-                    println(s"[Worker] $operationName failed. Retrying in 1s... Error: ${e.getMessage}")
+                    logger.info(s"[Worker] $operationName failed. Retrying in 1s... Error: ${e.getMessage}")
                     Thread.sleep(1000)
             }
         }
@@ -93,7 +94,7 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
             val myWorkerInfo = _allWorkers.filter(w => w.ip == workerRegisterInfo.ip && w.port == workerRegisterInfo.port)
             assert(myWorkerInfo.length == 1, "Registered but cannot find self in worker list")
             workerInfo = myWorkerInfo.head
-            println(s"[Worker ${workerInfo.workerId}] Registered successfully.")
+            logger.info(s"[Worker ${workerInfo.workerId}] Registered successfully.")
         } else {
             throw new RuntimeException("Registration failed logically (success=false)")
         }
@@ -110,7 +111,7 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
         )
         
         if (response.success) {
-            println(s"[Worker ${workerInfo.workerId}] Completion reported. Shutting down.")
+            logger.info(s"[Worker ${workerInfo.workerId}] Completion reported. Shutting down.")
             cleanup()
         }
     }

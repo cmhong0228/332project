@@ -6,6 +6,7 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.util.{Try, Success, Failure}
+import com.typesafe.scalalogging.LazyLogging
 
 /**
  * 워커 레지스트리의 최소 인터페이스
@@ -25,7 +26,7 @@ class LocalFileTransport(
     val workerId: Int,
     val sharedDirectory: Path,
     val registry: LocalTransportRegistry  // 최소 인터페이스만 요구
-)(implicit ec: ExecutionContext) extends FileTransport {
+)(implicit ec: ExecutionContext) extends FileTransport with LazyLogging {
 
     // Service thread가 처리할 요청: (FileId, Promise[Option[Path]])
     private val requestQueue: BlockingQueue[(FileId, Promise[Option[Path]])] = 
@@ -44,7 +45,7 @@ class LocalFileTransport(
         
         // Service Thread 시작
         val thread = new Thread(() => {
-            println(s"[Service Thread $workerId] Started")
+            logger.info(s"[Service Thread $workerId] Started")
         
             while (running.get()) {
                 try {
@@ -60,11 +61,11 @@ class LocalFileTransport(
                     case _: InterruptedException => 
                         Thread.currentThread().interrupt()
                     case e: Exception =>
-                        println(s"[Service Thread $workerId] Error: ${e.getMessage}")
+                        logger.info(s"[Service Thread $workerId] Error: ${e.getMessage}")
                 }
             }
             
-            println(s"[Service Thread $workerId] Stopped")
+            logger.info(s"[Service Thread $workerId] Stopped")
         })
         thread.setName(s"ServiceThread-Worker-$workerId")
         thread.setDaemon(true)
@@ -84,7 +85,7 @@ class LocalFileTransport(
         // 내부적으로 비동기 처리 후 결과를 블로킹하여 Boolean으로 변환
         val resultFuture: Future[Try[Unit]] = if (fileId.sourceWorkerId == workerId) {
             // 자기 자신에게 요청하는 경우: Service thread 거치지 않고 직접 처리
-            println(s"[Worker $workerId] Self-request detected, copying directly")
+            logger.info(s"[Worker $workerId] Self-request detected, copying directly")
             serveFile(fileId) match {
                 case Some(sourcePath) =>
                     Future {
@@ -147,7 +148,7 @@ class LocalFileTransport(
             result.isSuccess
         } catch {
             case e: Exception =>
-                println(s"[Worker $workerId] Error requesting file ${fileId.toFileName}: ${e.getMessage}")
+                logger.info(s"[Worker $workerId] Error requesting file ${fileId.toFileName}: ${e.getMessage}")
                 false
         }
     }

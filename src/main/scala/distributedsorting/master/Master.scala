@@ -7,9 +7,14 @@ import scala.concurrent.{Future, Promise, ExecutionContext, Await}
 import scala.concurrent.duration._
 import java.util.concurrent.TimeUnit
 import distributedsorting.distributedsorting._
+import com.typesafe.scalalogging.LazyLogging
+import distributedsorting.util.LoggingConfig
 
-object Master {
-    def main(args: Array[String]): Unit = {        
+object Master extends LazyLogging {
+    def main(args: Array[String]): Unit = {
+        // 로깅 설정 적용 (로거 초기화 전에 호출 필수!)
+        LoggingConfig.configure()
+
         MasterArgsParser.parser.parse(args, MasterConfig()) match {
             case Some(config) if config.numWorkers > 0 =>
                 val masterApp = new MasterApp(config.numWorkers)
@@ -20,22 +25,24 @@ object Master {
     }
 }
 
-class MasterApp (numWorkers: Int) extends ShutdownController { 
+class MasterApp (numWorkers: Int) extends ShutdownController with LazyLogging {
     implicit val ec: ExecutionContext = ExecutionContext.global
-    val masterIp: String = InetAddress.getLocalHost.getHostAddress 
+    val masterIp: String = InetAddress.getLocalHost.getHostAddress
     val masterService = new MasterServiceImpl(numWorkers, this)
 
     val server = ServerBuilder.forPort(0)
         .addService(MasterServiceGrpc.bindService(masterService, ec))
         .build()
-    
+
     val shutdownSignal = Promise[Unit]()
 
     def run(): Unit = {
-        server.start()     
+        server.start()
         val masterPort = server.getPort
-        
-        println(s"$masterIp:$masterPort") 
+
+        println(s"$masterIp:$masterPort")  // 이건 스크립트가 파싱하므로 println 유지
+        logger.info(s"Master server started at $masterIp:$masterPort")
+        logger.info(s"Waiting for $numWorkers workers to connect...")
     }
 
     def initiateShutdown(): Unit = {

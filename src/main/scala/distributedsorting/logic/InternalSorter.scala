@@ -7,13 +7,13 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Future, Await, ExecutionContext}
 import scala.concurrent.duration.Duration
 import java.util.concurrent.Executors
-
+import com.typesafe.scalalogging.LazyLogging
 
 import distributedsorting.distributedsorting.{Record, Key}
 
 // --- Core Trait ---
 
-trait InternalSorter {
+trait InternalSorter extends LazyLogging {
   /**
    * input directory들의 Seq.
    */
@@ -147,7 +147,7 @@ trait InternalSorter {
    */
   def runSortAndPartition(): List[Path] = {
     val localExecutor = Executors.newFixedThreadPool(optimalThreadCount)
-    println(s"[InternalSorter] optimalThreadcount: $optimalThreadCount, numCores: $numCores, memoryBasedThreadLimit: $memoryBasedThreadLimit, safeMemoryLimit: $safeMemoryLimit, maxFileSize: $maxFileSize")
+    logger.info(s"[InternalSorter] optimalThreadcount: $optimalThreadCount, numCores: $numCores, memoryBasedThreadLimit: $memoryBasedThreadLimit, safeMemoryLimit: $safeMemoryLimit, maxFileSize: $maxFileSize")
   
     implicit val localEc: ExecutionContext = ExecutionContext.fromExecutor(localExecutor)
 
@@ -182,7 +182,7 @@ trait InternalSorter {
 
     } finally {
       localExecutor.shutdown()
-      println("[InternalSorter] Thread Pool Shutdown.")
+      logger.info("[InternalSorter] Thread Pool Shutdown.")
     }
   }
 }

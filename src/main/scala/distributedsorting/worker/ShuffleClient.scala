@@ -7,13 +7,14 @@ import io.grpc.stub.StreamObserver
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable.ArrayBuffer
+import com.typesafe.scalalogging.LazyLogging
 
 /**
  * Shuffle Phase에서 다른 워커에게 파일을 요청하는 gRPC 클라이언트
  */
 class ShuffleClient(
     workerAddresses: Map[Int, String]
-)(implicit ec: ExecutionContext) {
+)(implicit ec: ExecutionContext) extends LazyLogging {
 
     // 각 워커에 대한 gRPC 채널 캐시
     private val channels = TrieMap[Int, ManagedChannel]()
@@ -58,11 +59,11 @@ class ShuffleClient(
             k = fileId.sortedRunId
         )
 
-        println(s"[ShuffleClient] Requesting ${fileId.toFileName} from Worker ${fileId.sourceWorkerId}")
+        logger.debug(s"[ShuffleClient] Requesting ${fileId.toFileName} from Worker ${fileId.sourceWorkerId}")
 
         stub.getIntermediateFile(request).map { response =>
             if (response.success) {
-                println(s"[ShuffleClient] Received ${fileId.toFileName} (${response.data.size()} bytes)")
+                logger.debug(s"[ShuffleClient] Received ${fileId.toFileName} (${response.data.size()} bytes)")
                 response.data.toByteArray
             } else {
                 throw new RuntimeException(s"Failed to get file ${fileId.toFileName}: ${response.errorMsg}")
@@ -91,7 +92,7 @@ class ShuffleClient(
             k = fileId.sortedRunId
         )
 
-        println(s"[ShuffleClient] Requesting ${fileId.toFileName} from Worker ${fileId.sourceWorkerId} (streaming to disk)")
+        logger.debug(s"[ShuffleClient] Requesting ${fileId.toFileName} from Worker ${fileId.sourceWorkerId} (streaming to disk)")
 
         val promise = Promise[Boolean]()
         var totalSize = 0L
@@ -112,7 +113,7 @@ class ShuffleClient(
                     // 첫 청크에서 파일 스트림 열기
                     if (chunk.chunkIndex == 0) {
                         totalSize = if (chunk.totalSize > 0) chunk.totalSize else 0L
-                        println(s"[ShuffleClient] Receiving ${fileId.toFileName}: $totalSize bytes")
+                        logger.debug(s"[ShuffleClient] Receiving ${fileId.toFileName}: $totalSize bytes")
 
                         Files.createDirectories(destPath.getParent)
                         outputStream = new BufferedOutputStream(
@@ -128,7 +129,7 @@ class ShuffleClient(
                     }
 
                     if (chunk.chunkIndex % 100 == 0) {
-                        println(s"[ShuffleClient] Progress ${fileId.toFileName}: chunk ${chunk.chunkIndex}, ${receivedBytes/1024/1024}MB received")
+                        logger.debug(s"[ShuffleClient] Progress ${fileId.toFileName}: chunk ${chunk.chunkIndex}, ${receivedBytes/1024/1024}MB received")
                     }
 
                     // 마지막 청크면 파일 닫기
@@ -138,12 +139,12 @@ class ShuffleClient(
                             outputStream.close()
                             outputStream = null
                         }
-                        println(s"[ShuffleClient] ✓ Completed ${fileId.toFileName}: $receivedBytes bytes")
+                        logger.info(s"[ShuffleClient] ✓ Completed ${fileId.toFileName}: $receivedBytes bytes")
                         promise.success(true)
                     }
                 } catch {
                     case e: Exception =>
-                        println(s"[ShuffleClient] Error writing chunk: ${e.getMessage}")
+                        logger.error(s"[ShuffleClient] Error writing chunk: ${e.getMessage}", e)
                         if (outputStream != null) {
                             try { outputStream.close() } catch { case _: Exception => }
                         }
@@ -152,7 +153,7 @@ class ShuffleClient(
             }
 
             override def onError(t: Throwable): Unit = {
-                println(s"[ShuffleClient] Error streaming ${fileId.toFileName}: ${t.getMessage}")
+                logger.error(s"[ShuffleClient] Error streaming ${fileId.toFileName}: ${t.getMessage}", t)
                 if (outputStream != null) {
                     try { outputStream.close() } catch { case _: Exception => }
                 }
@@ -162,7 +163,7 @@ class ShuffleClient(
             override def onCompleted(): Unit = {
                 // onNext에서 이미 처리됨
                 if (!promise.isCompleted) {
-                    println(s"[ShuffleClient] Stream completed for ${fileId.toFileName}")
+                    logger.debug(s"[ShuffleClient] Stream completed for ${fileId.toFileName}")
                     if (outputStream != null) {
                         try {
                             outputStream.flush()
@@ -197,7 +198,7 @@ class ShuffleClient(
             k = fileId.sortedRunId
         )
 
-        println(s"[ShuffleClient] Requesting ${fileId.toFileName} from Worker ${fileId.sourceWorkerId} (streaming - memory buffering)")
+        logger.debug(s"[ShuffleClient] Requesting ${fileId.toFileName} from Worker ${fileId.sourceWorkerId} (streaming - memory buffering)")
 
         val promise = Promise[Array[Byte]]()
         val chunks = ArrayBuffer[Array[Byte]]()
@@ -214,7 +215,7 @@ class ShuffleClient(
                 // 첫 청크에서 전체 파일 크기 저장
                 if (chunk.chunkIndex == 0 && chunk.totalSize > 0) {
                     totalSize = chunk.totalSize
-                    println(s"[ShuffleClient] Receiving ${fileId.toFileName}: $totalSize bytes")
+                    logger.debug(s"[ShuffleClient] Receiving ${fileId.toFileName}: $totalSize bytes")
                 }
 
                 // 청크 데이터 저장
@@ -222,25 +223,25 @@ class ShuffleClient(
                 chunks += chunkData
                 receivedBytes += chunkData.length
 
-                println(s"[ShuffleClient] Received chunk ${chunk.chunkIndex} of ${fileId.toFileName}: ${chunkData.length} bytes")
+                logger.debug(s"[ShuffleClient] Received chunk ${chunk.chunkIndex} of ${fileId.toFileName}: ${chunkData.length} bytes")
 
                 // 마지막 청크면 데이터 조합
                 if (chunk.isLast) {
                     val allData = chunks.flatten.toArray
-                    println(s"[ShuffleClient] Completed receiving ${fileId.toFileName}: ${allData.length} bytes (${chunks.size} chunks)")
+                    logger.info(s"[ShuffleClient] Completed receiving ${fileId.toFileName}: ${allData.length} bytes (${chunks.size} chunks)")
                     promise.success(allData)
                 }
             }
 
             override def onError(t: Throwable): Unit = {
-                println(s"[ShuffleClient] Error streaming ${fileId.toFileName}: ${t.getMessage}")
+                logger.error(s"[ShuffleClient] Error streaming ${fileId.toFileName}: ${t.getMessage}", t)
                 promise.failure(t)
             }
 
             override def onCompleted(): Unit = {
                 // onNext에서 이미 처리됨
                 if (!promise.isCompleted) {
-                    println(s"[ShuffleClient] Stream completed for ${fileId.toFileName}")
+                    logger.debug(s"[ShuffleClient] Stream completed for ${fileId.toFileName}")
                 }
             }
         }
@@ -259,7 +260,7 @@ class ShuffleClient(
         }
         channels.clear()
         stubs.clear()
-        println(s"[ShuffleClient] Shutdown complete")
+        logger.info(s"[ShuffleClient] Shutdown complete")
     }
 }
 
