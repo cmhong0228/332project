@@ -12,4 +12,5 @@ fi
 
 # 자바 실행 명령
 # 예: java -cp target/scala-2.13/distributedsorting.jar master 3
-java -cp "$JAR_FILE" "$COMMAND" "$1"
+# -Xmx2G: 힙 메모리 최대 2GB (master는 많이 필요 없음)
+exec java -Xmx2G -cp "$JAR_FILE" "$COMMAND" "$1"

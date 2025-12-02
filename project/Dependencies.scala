@@ -4,6 +4,8 @@ object Dependencies {
   val munitVersion = "1.0.0"
   val configVersion = "1.4.3"
   val scoptVersion = "4.1.0"
+  val scalaLoggingVersion = "3.9.5"
+  val logbackVersion = "1.2.13"  // SLF4J 1.7.x 호환 버전
 
   val grpcDependencies = Seq(
     "io.grpc" % "grpc-netty" % scalapb.compiler.Version.grpcJavaVersion,
@@ -23,5 +25,10 @@ object Dependencies {
     "com.github.scopt" %% "scopt" % scoptVersion
   )
 
-  val projectDependencies = grpcDependencies ++ testDependencies ++ configDependencies ++ scoptDependencies
+  val loggingDependencies = Seq(
+    "com.typesafe.scala-logging" %% "scala-logging" % scalaLoggingVersion,
+    "ch.qos.logback" % "logback-classic" % logbackVersion
+  )
+
+  val projectDependencies = grpcDependencies ++ testDependencies ++ configDependencies ++ scoptDependencies ++ loggingDependencies
 }

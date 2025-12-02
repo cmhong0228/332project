@@ -14,4 +14,6 @@ fi
 
 # 모든 인수를 자바 명령으로 전달
 # 예: java -cp target/scala-2.13/distributedsorting.jar distributedsorting.worker.Worker 141.223.91.80:30040 -I /d1 /d2 -O /out
-java -cp "$JAR_FILE" "$COMMAND" "$@"
+# -Xmx8G: 힙 메모리 최대 8GB (대용량 데이터 정렬용)
+# -Xms4G: 초기 힙 메모리 4GB (미리 할당하여 GC 빈도 감소)
+exec java -Xms4G -Xmx8G -cp "$JAR_FILE" "$COMMAND" "$@"

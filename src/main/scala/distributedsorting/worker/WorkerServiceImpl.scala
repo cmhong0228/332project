@@ -8,6 +8,7 @@ import java.nio.file.{Files, Path}
 import java.io.{FileInputStream, BufferedInputStream}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Try, Success, Failure}
+import com.typesafe.scalalogging.LazyLogging
 
 /**
  * gRPC WorkerService 구현
@@ -16,7 +17,7 @@ import scala.util.{Try, Success, Failure}
 class WorkerServiceImpl(
     //val workerId: Int,
     val partitionDir: Path
-)(implicit ec: ExecutionContext) extends WorkerServiceGrpc.WorkerService {
+)(implicit ec: ExecutionContext) extends WorkerServiceGrpc.WorkerService with LazyLogging {
 
     private var server: Option[Server] = None
     
@@ -37,7 +38,7 @@ class WorkerServiceImpl(
             .addService(WorkerServiceGrpc.bindService(this, ec))
 
         server = Some(serverBuilder.build().start())
-        println(s"[WorkerService $workerId] Started on port ??? ")
+        logger.info(s"[WorkerService $workerId] Started on port ??? ")
     }
 
     /**
@@ -48,7 +49,7 @@ class WorkerServiceImpl(
             s.shutdown()
             s.awaitTermination()
         }
-        println(s"[WorkerService $workerId] Shutdown")
+        logger.info(s"[WorkerService $workerId] Shutdown")
     }
 
     /**
@@ -59,7 +60,7 @@ class WorkerServiceImpl(
         val fileId = FileId(request.i, request.j, request.k)
         val filePath = partitionDir.resolve(fileId.toFileName)
 
-        println(s"[WorkerService $workerId] Serving file: ${fileId.toFileName}")
+        logger.info(s"[WorkerService $workerId] Serving file: ${fileId.toFileName}")
 
         Future {
             Try {
@@ -77,7 +78,7 @@ class WorkerServiceImpl(
             } match {
                 case Success(response) => response
                 case Failure(ex) =>
-                    println(s"[WorkerService $workerId] Error serving ${fileId.toFileName}: ${ex.getMessage}")
+                    logger.info(s"[WorkerService $workerId] Error serving ${fileId.toFileName}: ${ex.getMessage}")
                     IntermediateFileResponse(
                         data = com.google.protobuf.ByteString.EMPTY,
                         success = false,
@@ -98,7 +99,7 @@ class WorkerServiceImpl(
         val fileId = FileId(request.i, request.j, request.k)
         val filePath = partitionDir.resolve(fileId.toFileName)
 
-        println(s"[WorkerService $workerId] Streaming file: ${fileId.toFileName}")
+        logger.info(s"[WorkerService $workerId] Streaming file: ${fileId.toFileName}")
 
         Future {
             Try {
@@ -144,7 +145,7 @@ class WorkerServiceImpl(
                         chunkIndex += 1
                     }
 
-                    println(s"[WorkerService $workerId] Streamed ${fileId.toFileName}: $chunkIndex chunks, $totalBytesRead bytes")
+                    logger.info(s"[WorkerService $workerId] Streamed ${fileId.toFileName}: $chunkIndex chunks, $totalBytesRead bytes")
                     responseObserver.onCompleted()
 
                 } finally {
@@ -155,7 +156,7 @@ class WorkerServiceImpl(
             } match {
                 case Success(_) => // Already handled
                 case Failure(ex) =>
-                    println(s"[WorkerService $workerId] Error streaming ${fileId.toFileName}: ${ex.getMessage}")
+                    logger.info(s"[WorkerService $workerId] Error streaming ${fileId.toFileName}: ${ex.getMessage}")
                     val errorChunk = FileChunk(
                         data = com.google.protobuf.ByteString.EMPTY,
                         chunkIndex = 0,

@@ -12,6 +12,7 @@ import scala.concurrent.duration.Duration
 import java.lang.management.ManagementFactory
 import com.sun.management.UnixOperatingSystemMXBean
 import scala.util.Try
+import com.typesafe.scalalogging.LazyLogging
 
 /**
  * 대용량 데이터를 처리하기 위한 외부 정렬(External Sorting) 기능을 정의하는 trait
@@ -26,7 +27,7 @@ import scala.util.Try
  * * * externalSorterOrdering ordering 지정
  * * executeExternalSort 호출(파일 읽기, merge, 파일 정리 모두 수행됨)
  */
-trait ExternalSorter {
+trait ExternalSorter extends LazyLogging {
     val RECORD_SIZE: Int
 
     /**
@@ -163,7 +164,7 @@ trait ExternalSorter {
         val maxSingleK = numMaxMergeGroup
 
         val (optimalK, threadCount) = if (totalFiles <= maxSingleK) {
-            println(s"[ExternalSorter] Single Pass Merge, maxSingleK = $maxSingleK (maxFiles: $maxFiles)")
+            logger.info(s"[ExternalSorter] Single Pass Merge, maxSingleK = $maxSingleK (maxFiles: $maxFiles)")
             (totalFiles, 1)
         } else {
             val threads = Runtime.getRuntime.availableProcessors()
@@ -171,7 +172,7 @@ trait ExternalSorter {
             val memPerThread = safeMemory / threads
             
             val parallelK = math.max(2, math.min((memPerThread / BUFFER_SIZE).toInt, (maxFiles / threads).toInt) - 1)
-            println(s"[ExternalSorter] Multi Pass Merge, k = $parallelK")
+            logger.info(s"[ExternalSorter] Multi Pass Merge, k = $parallelK")
             
             (parallelK, threads)
         }
@@ -332,7 +333,7 @@ trait ExternalSorter {
             val sortedRuns = getInputFiles()
             
             if (sortedRuns.isEmpty) {
-                println("정렬할 입력 파일이 없습니다.")
+                logger.info("정렬할 입력 파일이 없습니다.")
                 return
             }
 
@@ -357,7 +358,7 @@ trait ExternalSorter {
             
         } catch {
             case e: Exception =>
-                println(s"외부 정렬 중 오류 발생: ${e.getMessage}")
+                logger.info(s"외부 정렬 중 오류 발생: ${e.getMessage}")
                 throw e // 오류 재전파
         } finally {
             // (5) 성공/실패 여부와 관계없이 임시 파일 정리

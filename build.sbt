@@ -24,7 +24,11 @@ lazy val root = (project in file("."))
 
     assembly / assemblyMergeStrategy := {
       case PathList("META-INF", "services", xs @ _*) => MergeStrategy.concat
+      case PathList("META-INF", "versions", xs @ _*) => MergeStrategy.first
       case PathList("META-INF", xs @ _*)             => MergeStrategy.discard
+      case "reference.conf"                          => MergeStrategy.concat
+      case "application.conf"                        => MergeStrategy.concat
+      case "logback.xml"                             => MergeStrategy.first
       case x => MergeStrategy.first
     }
   )

@@ -12,26 +12,31 @@ import distributedsorting.distributedsorting._
 import distributedsorting.logic._
 import distributedsorting.worker.TestHelpers.{FileStructure, ShuffleResult}
 import scala.jdk.CollectionConverters._
+import com.typesafe.scalalogging.LazyLogging
+import distributedsorting.util.LoggingConfig
 
-object Worker {
+object Worker extends LazyLogging {
     val config = ConfigFactory.load()
     val configPath = "distributedsorting"
 
     def main(args: Array[String]): Unit = {
+        // 로깅 설정 적용 (로거 초기화 전에 호출 필수!)
+        LoggingConfig.configure()
+
         WorkerArgsParser.parser.parse(ArgsUtils.normalizeInputDirectoriesArgs(args), WorkerConfig()) match {
             case Some(config) =>
                 val Array(masterIp, masterPortStr) = config.masterAddress.split(":")
                 val masterPort = masterPortStr.toInt
-                
-                println(s"Master IP: $masterIp, Port: $masterPort")
-                println(s"Input Directories: ${config.inputDirs.mkString(", ")}")
-                println(s"Output Directory: ${config.outputDir}")
-                
+
+                logger.info(s"Master IP: $masterIp, Port: $masterPort")
+                logger.info(s"Input Directories: ${config.inputDirs.mkString(", ")}")
+                logger.info(s"Output Directory: ${config.outputDir}")
+
                 val workerApp = new WorkerApp(masterIp, masterPort, config.inputDirs, config.outputDir)
                 workerApp.run()
 
             case None =>
-                println("Argument parsing failed.")
+                logger.error("Argument parsing failed.")
         }
     }
 }
@@ -41,7 +46,7 @@ class WorkerApp (
   port: Int,
   inputDirsStr: Seq[String],
   outputDirStr: String
-) extends MasterClient with ExternalSorter with InternalSorter{   
+) extends MasterClient with ExternalSorter with InternalSorter with LazyLogging {   
   implicit val ec: ExecutionContext = ExecutionContext.global  
   val config = ConfigFactory.load()
   val configPath = "distributedsorting"
@@ -119,11 +124,11 @@ class WorkerApp (
     registerWorker()
     workerId = workerInfo.workerId
     workerService.registerWorkerId(workerId)
-    println(s"complete registration")
-    println(s"my info: id $workerId, ip ${workerInfo.ip}, port ${workerInfo.port}")
-    println("========== all workers ==========")
-    getAllWorkers.foreach(w => println(s"id ${w.workerId}, ip ${w.ip}, port ${w.port}"))
-    println("=================================")
+    logger.info(s"complete registration")
+    logger.info(s"my info: id $workerId, ip ${workerInfo.ip}, port ${workerInfo.port}")
+    logger.info("========== all workers ==========")
+    getAllWorkers.foreach(w => logger.info(s"id ${w.workerId}, ip ${w.ip}, port ${w.port}"))
+    logger.info("=================================")
 
     // Sampling
     pivots = {
@@ -133,12 +138,12 @@ class WorkerApp (
         executeSampling(inputDirs)
       }
     }
-    println(s"pivots: $pivots")
-    println("finish sampling phase")
+    logger.debug(s"pivots: $pivots")
+    logger.info("finish sampling phase")
 
     // Sort & Partition
     runSortAndPartition()
-    println("finish sort and partition phase")
+    logger.info("finish sort and partition phase")
     val totalRecordsAfterSort = Files.walk(partitionOutputDir, 1).filter(p => Files.isRegularFile(p)).mapToLong(p => Files.size(p)).sum() / 100
 
     val localFileIds: Set[FileId] = FileStructureManager.collectLocalFileIds(partitionOutputDir)
@@ -165,7 +170,7 @@ class WorkerApp (
       try {
         remoteFileTransport.close()
       } catch {
-        case e: Throwable => println("Error: cannot close connection")
+        case e: Throwable => logger.warn("Error: cannot close connection", e)
       }
 
       isSuccessShuffle = result.failureCount == 0
@@ -174,13 +179,13 @@ class WorkerApp (
         resetWorkerInfos()
       }
     }
-    
-    println("finish shuffle phase")
+
+    logger.info("finish shuffle phase")
     val totalRecordsAfterShuffle = Files.walk(shuffleOutputDir, 1).filter(p => Files.isRegularFile(p)).mapToLong(p => Files.size(p)).sum() / 100
 
     // Merge
     executeExternalSort()
-    println("finish merge phase")
+    logger.info("finish merge phase")
 
     reportCompletion()
 
@@ -188,7 +193,7 @@ class WorkerApp (
 
     cleanupTempDirectories()
     val totalRecordsAfterMerge = Files.walk(outputDir, 1).filter(p => Files.isRegularFile(p)).mapToLong(p => Files.size(p)).sum() / 100
-    println(s"total records: sort $totalRecordsAfterSort, shuffle $totalRecordsAfterShuffle, merge $totalRecordsAfterMerge")
+    logger.info(s"total records: sort $totalRecordsAfterSort, shuffle $totalRecordsAfterShuffle, merge $totalRecordsAfterMerge")
   }
 
   /**
@@ -223,9 +228,9 @@ class WorkerApp (
         )
         
         val failureCount = getFiles(fileStructure).size - successCount
-        
-        println(s"Worker $workerId: Successfully fetched $successCount files")
-        
+
+        logger.info(s"Worker $workerId: Successfully fetched $successCount files")
+
         buildResult(successCount, failureCount)
     }
 

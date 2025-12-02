@@ -1,0 +1,24 @@
+<configuration>
+  <!--
+    이 파일은 fallback 용도입니다.
+    LoggingConfig.configure()가 호출되면 application.conf 설정을 사용합니다.
+    호출되지 않으면 이 기본 설정을 사용합니다.
+  -->
+
+  <!-- Console Appender: 콘솔에 로그 출력 -->
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- 로그 레벨 설정 -->
+  <logger name="distributedsorting" level="INFO" />
+  <logger name="io.grpc" level="WARN" />
+  <logger name="io.netty" level="WARN" />
+
+  <!-- Root 로거 설정 (기본: 콘솔만) -->
+  <root level="INFO">
+    <appender-ref ref="STDOUT" />
+  </root>
+</configuration>
