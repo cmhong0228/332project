@@ -7,10 +7,16 @@ COMMAND="distributedsorting.master.Master"
 # 인수의 개수 확인 (워커 수)
 if [ -z "$1" ]; then
     echo "Usage: $0 <# of workers>"
+    echo "Environment variables:"
+    echo "  LOG_LEVEL=<level>  Set logging level (TRACE, DEBUG, INFO, WARN, ERROR). Default: INFO"
     exit 1
 fi
+
+# 로깅 레벨 설정 (환경변수에서 읽기, 기본값: INFO)
+LOG_LEVEL=${LOG_LEVEL:-INFO}
 
 # 자바 실행 명령
 # 예: java -cp target/scala-2.13/distributedsorting.jar master 3
 # -Xmx2G: 힙 메모리 최대 2GB (master는 많이 필요 없음)
-exec java -Xmx2G -cp "$JAR_FILE" "$COMMAND" "$1"
+# -Ddistributedsorting.logging.level: 로깅 레벨 오버라이드
+exec java -Xmx2G -Ddistributedsorting.logging.level=$LOG_LEVEL -cp "$JAR_FILE" "$COMMAND" "$1"

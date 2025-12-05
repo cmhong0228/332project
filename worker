@@ -9,11 +9,17 @@ COMMAND="distributedsorting.worker.Worker"
 if [ "$#" -lt 5 ]; then
     echo "Usage: $0 <master IP:port> -I <input directory 1> <input directory 2> ... -O <output directory>"
     echo "Example: $0 141.223.91.80:30040 -I /data1/input /data2/input -O /home/gla/data"
+    echo "Environment variables:"
+    echo "  LOG_LEVEL=<level>  Set logging level (TRACE, DEBUG, INFO, WARN, ERROR). Default: INFO"
     exit 1
 fi
+
+# 로깅 레벨 설정 (환경변수에서 읽기, 기본값: INFO)
+LOG_LEVEL=${LOG_LEVEL:-INFO}
 
 # 모든 인수를 자바 명령으로 전달
 # 예: java -cp target/scala-2.13/distributedsorting.jar distributedsorting.worker.Worker 141.223.91.80:30040 -I /d1 /d2 -O /out
 # -Xmx8G: 힙 메모리 최대 8GB (대용량 데이터 정렬용)
 # -Xms4G: 초기 힙 메모리 4GB (미리 할당하여 GC 빈도 감소)
-exec java -Xms4G -Xmx8G -cp "$JAR_FILE" "$COMMAND" "$@"
+# -Ddistributedsorting.logging.level: 로깅 레벨 오버라이드
+exec java -Xms4G -Xmx8G -Ddistributedsorting.logging.level=$LOG_LEVEL -cp "$JAR_FILE" "$COMMAND" "$@"
