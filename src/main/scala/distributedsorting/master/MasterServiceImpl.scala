@@ -66,13 +66,15 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
                 pendingRegisterPromises.add(myPromise)
                 workerMap(workerKey) = workerInfo
                 finishedWorkers(index) = false // 재 접속 했기 때문에 초기화
-            } else { // 새로운 접속 
+                logger.info(s"[Master] Worker $workerId RE-REGISTERED (ip=${request.ip}, port=${request.port})")
+            } else { // 새로운 접속
                 currentCount = connectedWorkersCount.incrementAndGet()
                 val workerInfo = new WorkerInfo(currentCount, request.ip, request.port)
                 workers(currentCount-1) = workerInfo
                 workerMap(workerKey) = workerInfo
                 pendingRegisterPromises.add(myPromise)
                 totalInputRecords = totalInputRecords + request.numRecords
+                logger.info(s"[Master] Worker $currentCount registered (ip=${request.ip}, port=${request.port}, records=${request.numRecords})")
             }  
             
             if (currentCount >= numWorkers) {
@@ -91,7 +93,7 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
 
                 if (!isCollectedAllWorkers) {
                     val workerIps = allWorkersSeq.map(_.ip).mkString(", ")
-                    logger.info(workerIps)
+                    println(workerIps)
                     isCollectedAllWorkers = true
                 }                
             }

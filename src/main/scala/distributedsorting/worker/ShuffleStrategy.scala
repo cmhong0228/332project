@@ -89,7 +89,7 @@ class LimitedConcurrencyShuffleStrategy(maxConcurrency: Int = 10) extends Shuffl
 
         // maxConcurrency개씩 배치로 나눠서 처리
         fileList.grouped(maxConcurrency).zipWithIndex.foreach { case (batch, batchIndex) =>
-            logger.info(s"[LimitedConcurrencyShuffleStrategy] Processing batch ${batchIndex + 1} (${batch.size} files)")
+            logger.debug(s"[LimitedConcurrencyShuffleStrategy] Processing batch ${batchIndex + 1} (${batch.size} files)")
 
             // 배치 내의 파일들을 병렬로 요청
             val futures = batch.map { fileId =>
@@ -105,10 +105,10 @@ class LimitedConcurrencyShuffleStrategy(maxConcurrency: Int = 10) extends Shuffl
                 val results = Await.result(Future.sequence(futures), 120.seconds)
                 val batchSuccessCount = results.count(_._2 == true)
                 successCount += batchSuccessCount
-                logger.info(s"[LimitedConcurrencyShuffleStrategy] Batch ${batchIndex + 1} completed: $batchSuccessCount/${batch.size} succeeded")
+                logger.debug(s"[LimitedConcurrencyShuffleStrategy] Batch ${batchIndex + 1} completed: $batchSuccessCount/${batch.size} succeeded")
             } catch {
                 case e: Exception =>
-                    logger.info(s"[LimitedConcurrencyShuffleStrategy] Batch ${batchIndex + 1} failed: ${e.getMessage}")
+                    logger.warn(s"[LimitedConcurrencyShuffleStrategy] Batch ${batchIndex + 1} failed: ${e.getMessage}")
                     e.printStackTrace()
             }
         }
@@ -157,9 +157,7 @@ class PerWorkerShuffleStrategy(filesPerWorker: Int = 1) extends ShuffleStrategy 
         val filesBySourceWorker = fileList.groupBy(_.sourceWorkerId)
         val numWorkers = filesBySourceWorker.keys.size
 
-        logger.info(s"[PerWorkerStrategy] Shuffling ${fileList.size} files from $numWorkers workers")
-        logger.info(s"[PerWorkerStrategy] Strategy: $filesPerWorker file(s) per worker concurrently")
-        logger.info(s"[PerWorkerStrategy] Max concurrent downloads: ${numWorkers * filesPerWorker}")
+        logger.info(s"[PerWorkerStrategy] Shuffling ${fileList.size} files from $numWorkers workers (${filesPerWorker} files/worker/round)")
 
         var totalSuccess = 0
         var roundNumber = 0
@@ -186,9 +184,9 @@ class PerWorkerShuffleStrategy(filesPerWorker: Int = 1) extends ShuffleStrategy 
 
             if (currentBatch.isEmpty) {
                 // 모든 큐가 비었으면 종료
-                logger.info(s"[PerWorkerStrategy] All queues empty, finishing")
+                logger.debug(s"[PerWorkerStrategy] All queues empty, finishing")
             } else {
-                logger.info(s"[PerWorkerStrategy] Round $roundNumber: Fetching ${currentBatch.size} files concurrently")
+                logger.debug(s"[PerWorkerStrategy] Round $roundNumber: Fetching ${currentBatch.size} files concurrently")
 
                 // 5. 선택된 파일들을 병렬로 다운로드
                 val futures = currentBatch.map { fileId =>
@@ -199,9 +197,9 @@ class PerWorkerShuffleStrategy(filesPerWorker: Int = 1) extends ShuffleStrategy 
                         val elapsed = System.currentTimeMillis() - startTime
 
                         if (result) {
-                            logger.info(s"[PerWorkerStrategy] ✓ Worker ${fileId.sourceWorkerId} → ${fileId.toFileName} (${elapsed}ms)")
+                            logger.debug(s"[PerWorkerStrategy] ✓ Worker ${fileId.sourceWorkerId} → ${fileId.toFileName} (${elapsed}ms)")
                         } else {
-                            logger.info(s"[PerWorkerStrategy] ✗ Worker ${fileId.sourceWorkerId} → ${fileId.toFileName} FAILED")
+                            logger.debug(s"[PerWorkerStrategy] ✗ Worker ${fileId.sourceWorkerId} → ${fileId.toFileName} FAILED")
                         }
 
                         (fileId, result)
@@ -214,29 +212,26 @@ class PerWorkerShuffleStrategy(filesPerWorker: Int = 1) extends ShuffleStrategy 
                     val roundSuccess = results.count(_._2 == true)
                     totalSuccess += roundSuccess
 
-                    logger.info(s"[PerWorkerStrategy] Round $roundNumber completed: $roundSuccess/${currentBatch.size} succeeded")
+                    logger.debug(s"[PerWorkerStrategy] Round $roundNumber completed: $roundSuccess/${currentBatch.size} succeeded")
 
-                    // 워커별 성공률 출력
-                    val successByWorker = results.filter(_._2).groupBy(_._1.sourceWorkerId).mapValues(_.size)
+                    // 워커별 성공률 출력 (실패가 있을 때만)
                     val failByWorker = results.filterNot(_._2).groupBy(_._1.sourceWorkerId).mapValues(_.size)
 
-                    successByWorker.toSeq.sortBy(_._1).foreach { case (wId, count) =>
-                        val failed = failByWorker.getOrElse(wId, 0)
-                        if (failed > 0) {
-                            logger.info(s"[PerWorkerStrategy]   Worker $wId: $count succeeded, $failed failed")
+                    if (failByWorker.nonEmpty) {
+                        failByWorker.toSeq.sortBy(_._1).foreach { case (wId, count) =>
+                            logger.warn(s"[PerWorkerStrategy] Worker $wId: $count files failed in round $roundNumber")
                         }
                     }
 
                 } catch {
                     case e: Exception =>
-                        logger.info(s"[PerWorkerStrategy] Round $roundNumber failed: ${e.getMessage}")
+                        logger.warn(s"[PerWorkerStrategy] Round $roundNumber failed: ${e.getMessage}")
                         e.printStackTrace()
                 }
             }
         }
 
         logger.info(s"[PerWorkerStrategy] Complete: $totalSuccess/${fileList.size} files succeeded in $roundNumber rounds")
-        logger.info(s"[PerWorkerStrategy] Files per worker per round: $filesPerWorker")
 
         totalSuccess
     }
@@ -264,7 +259,7 @@ class IndependentWorkerShuffleStrategy(filesPerWorker: Int = 1) extends ShuffleS
 
       val workerTasks: Iterable[Future[Int]] = filesBySourceWorker.map { case (workerId, files) =>
           Future {
-            logger.info(s"[Independent] -> Worker $workerId: Total ${files.size} files to download")
+            logger.debug(s"[Independent] -> Worker $workerId: Total ${files.size} files to download")
 
             var successCount = 0
             // 배치 처리
@@ -275,7 +270,7 @@ class IndependentWorkerShuffleStrategy(filesPerWorker: Int = 1) extends ShuffleS
                     Future {
                         val destPath = shuffleOutputDir.resolve(fileId.toFileName)
                         val result = fileTransport.requestFile(fileId, destPath)
-                        if (!result) logger.info(s"[Fail] $fileId")
+                        if (!result) logger.debug(s"[Fail] $fileId")
                         result
                     }
                 }
@@ -283,29 +278,29 @@ class IndependentWorkerShuffleStrategy(filesPerWorker: Int = 1) extends ShuffleS
                 val batchResults = Await.result(Future.sequence(batchFutures), Duration.Inf)
                 successCount += batchResults.count(_ == true)
             }
-            logger.info(s"[Independent] <- Worker $workerId Finished: $successCount/${files.size}")
+            logger.debug(s"[Independent] <- Worker $workerId Finished: $successCount/${files.size}")
             successCount
           }
       }
 
-      logger.info("[IndependentWorkerStrategy] Waiting for all workers to finish...")
-      
+      logger.debug("[IndependentWorkerStrategy] Waiting for all workers to finish...")
+
       val allWorkerResults = Await.result(Future.sequence(workerTasks), Duration.Inf)
-      
+
       val totalSuccess = allWorkerResults.sum
       val totalTime = System.currentTimeMillis() - startTime
-      
+
       logger.info(s"[IndependentWorkerStrategy] Complete: $totalSuccess/${fileList.size} files succeeded in ${totalTime}ms")
       totalSuccess
 
     } catch {
       case e: Exception =>
-        logger.info(s"[IndependentWorkerStrategy] Error during shuffle: ${e.getMessage}")
+        logger.error(s"[IndependentWorkerStrategy] Error during shuffle: ${e.getMessage}")
         e.printStackTrace()
         0
     } finally {
-      ioExecutor.shutdown() 
-      logger.info("[IndependentWorkerStrategy] IO Thread Pool Shutdown.")
+      ioExecutor.shutdown()
+      logger.debug("[IndependentWorkerStrategy] IO Thread Pool Shutdown.")
     }
   }
 }
