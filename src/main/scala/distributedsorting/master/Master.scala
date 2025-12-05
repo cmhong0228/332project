@@ -40,7 +40,8 @@ class MasterApp (numWorkers: Int) extends ShutdownController with LazyLogging {
         server.start()
         val masterPort = server.getPort
 
-        println(s"$masterIp:$masterPort")  // 이건 스크립트가 파싱하므로 println 유지
+        // deploy.sh는 정규식으로 IP:PORT만 추출하므로 앞에 텍스트가 있어도 OK
+        println(s"Master Address: $masterIp:$masterPort")
         logger.info(s"Master server started at $masterIp:$masterPort")
         logger.info(s"Waiting for $numWorkers workers to connect...")
     }
