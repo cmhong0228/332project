@@ -91,7 +91,7 @@ class MasterServiceImpl(val numWorkers: Int, private val shutdownController: Shu
 
                 if (!isCollectedAllWorkers) {
                     val workerIps = allWorkersSeq.map(_.ip).mkString(", ")
-                    logger.info(workerIps)
+                    println(workerIps)
                     isCollectedAllWorkers = true
                 }                
             }
