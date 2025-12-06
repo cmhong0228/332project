@@ -139,7 +139,7 @@ class ShuffleClient(
                             outputStream.close()
                             outputStream = null
                         }
-                        logger.info(s"[ShuffleClient] ✓ Completed ${fileId.toFileName}: $receivedBytes bytes")
+                        logger.debug(s"[ShuffleClient] ✓ Completed ${fileId.toFileName}: $receivedBytes bytes")
                         promise.success(true)
                     }
                 } catch {
@@ -228,7 +228,7 @@ class ShuffleClient(
                 // 마지막 청크면 데이터 조합
                 if (chunk.isLast) {
                     val allData = chunks.flatten.toArray
-                    logger.info(s"[ShuffleClient] Completed receiving ${fileId.toFileName}: ${allData.length} bytes (${chunks.size} chunks)")
+                    logger.debug(s"[ShuffleClient] Completed receiving ${fileId.toFileName}: ${allData.length} bytes (${chunks.size} chunks)")
                     promise.success(allData)
                 }
             }
@@ -260,7 +260,7 @@ class ShuffleClient(
         }
         channels.clear()
         stubs.clear()
-        logger.info(s"[ShuffleClient] Shutdown complete")
+        logger.debug(s"[ShuffleClient] Shutdown complete")
     }
 }
 
