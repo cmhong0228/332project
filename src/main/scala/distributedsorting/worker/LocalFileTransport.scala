@@ -45,7 +45,7 @@ class LocalFileTransport(
         
         // Service Thread 시작
         val thread = new Thread(() => {
-            logger.info(s"[Service Thread $workerId] Started")
+            logger.debug(s"[Service Thread $workerId] Started")
         
             while (running.get()) {
                 try {
@@ -61,11 +61,11 @@ class LocalFileTransport(
                     case _: InterruptedException => 
                         Thread.currentThread().interrupt()
                     case e: Exception =>
-                        logger.info(s"[Service Thread $workerId] Error: ${e.getMessage}")
+                        logger.debug(s"[Service Thread $workerId] Error: ${e.getMessage}")
                 }
             }
-            
-            logger.info(s"[Service Thread $workerId] Stopped")
+
+            logger.debug(s"[Service Thread $workerId] Stopped")
         })
         thread.setName(s"ServiceThread-Worker-$workerId")
         thread.setDaemon(true)
@@ -85,7 +85,7 @@ class LocalFileTransport(
         // 내부적으로 비동기 처리 후 결과를 블로킹하여 Boolean으로 변환
         val resultFuture: Future[Try[Unit]] = if (fileId.sourceWorkerId == workerId) {
             // 자기 자신에게 요청하는 경우: Service thread 거치지 않고 직접 처리
-            logger.info(s"[Worker $workerId] Self-request detected, copying directly")
+            logger.debug(s"[Worker $workerId] Self-request detected, copying directly")
             serveFile(fileId) match {
                 case Some(sourcePath) =>
                     Future {
@@ -148,7 +148,7 @@ class LocalFileTransport(
             result.isSuccess
         } catch {
             case e: Exception =>
-                logger.info(s"[Worker $workerId] Error requesting file ${fileId.toFileName}: ${e.getMessage}")
+                logger.debug(s"[Worker $workerId] Error requesting file ${fileId.toFileName}: ${e.getMessage}")
                 false
         }
     }
