@@ -99,7 +99,7 @@ class WorkerServiceImpl(
         val fileId = FileId(request.i, request.j, request.k)
         val filePath = partitionDir.resolve(fileId.toFileName)
 
-        logger.info(s"[WorkerService $workerId] Streaming file: ${fileId.toFileName}")
+        logger.debug(s"[WorkerService $workerId] Streaming file: ${fileId.toFileName}")
 
         Future {
             Try {
@@ -145,7 +145,7 @@ class WorkerServiceImpl(
                         chunkIndex += 1
                     }
 
-                    logger.info(s"[WorkerService $workerId] Streamed ${fileId.toFileName}: $chunkIndex chunks, $totalBytesRead bytes")
+                    logger.debug(s"[WorkerService $workerId] Streamed ${fileId.toFileName}: $chunkIndex chunks, $totalBytesRead bytes")
                     responseObserver.onCompleted()
 
                 } finally {
