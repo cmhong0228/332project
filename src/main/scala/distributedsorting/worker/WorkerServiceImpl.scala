@@ -133,7 +133,6 @@ class WorkerServiceImpl(
             } match {
                 case Success(_) => // Already handled
                 case Failure(ex) =>
-                    logger.debug(s"[WorkerService $workerId] Error streaming ${fileId.toFileName}: ${ex.getMessage}")
                     val errorChunk = FileChunk(
                         data = com.google.protobuf.ByteString.EMPTY,
                         chunkIndex = 0,
@@ -142,7 +141,7 @@ class WorkerServiceImpl(
                         errorMsg = ex.getMessage
                     )
                     responseObserver.onNext(errorChunk)
-                    responseObserver.onError(new RuntimeException(ex.getMessage))
+                    responseObserver.onCompleted()
             }
         }
     }
