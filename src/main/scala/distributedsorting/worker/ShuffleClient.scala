@@ -103,7 +103,9 @@ class ShuffleClient(
             override def onNext(chunk: FileChunk): Unit = {
                 try {
                     if (chunk.errorMsg.nonEmpty) {
-                        promise.failure(new RuntimeException(s"Error receiving chunk: ${chunk.errorMsg}"))
+                        if (!promise.isCompleted) {
+                            promise.failure(new RuntimeException(s"Error receiving chunk: ${chunk.errorMsg}"))
+                        }
                         if (outputStream != null) {
                             outputStream.close()
                         }
@@ -148,7 +150,9 @@ class ShuffleClient(
                         if (outputStream != null) {
                             try { outputStream.close() } catch { case _: Exception => }
                         }
-                        promise.failure(e)
+                        if (!promise.isCompleted) {
+                            promise.failure(e)
+                        }
                 }
             }
 
@@ -157,7 +161,9 @@ class ShuffleClient(
                 if (outputStream != null) {
                     try { outputStream.close() } catch { case _: Exception => }
                 }
-                promise.failure(t)
+                if (!promise.isCompleted) {
+                    promise.failure(t)
+                }
             }
 
             override def onCompleted(): Unit = {
@@ -208,7 +214,9 @@ class ShuffleClient(
         val responseObserver = new StreamObserver[FileChunk] {
             override def onNext(chunk: FileChunk): Unit = {
                 if (chunk.errorMsg.nonEmpty) {
-                    promise.failure(new RuntimeException(s"Error receiving chunk: ${chunk.errorMsg}"))
+                    if (!promise.isCompleted) {
+                        promise.failure(new RuntimeException(s"Error receiving chunk: ${chunk.errorMsg}"))
+                    }
                     return
                 }
 
@@ -235,7 +243,9 @@ class ShuffleClient(
 
             override def onError(t: Throwable): Unit = {
                 logger.error(s"[ShuffleClient] Error streaming ${fileId.toFileName}: ${t.getMessage}", t)
-                promise.failure(t)
+                if (!promise.isCompleted) {
+                    promise.failure(t)
+                }
             }
 
             override def onCompleted(): Unit = {
