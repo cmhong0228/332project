@@ -30,29 +30,6 @@ class WorkerServiceImpl(
     }
 
     /**
-     * gRPC 서버 시작 (사용 x)
-     */
-    def start(): Unit = {
-        val serverBuilder = ServerBuilder
-            .forPort(0)
-            .addService(WorkerServiceGrpc.bindService(this, ec))
-
-        server = Some(serverBuilder.build().start())
-        logger.info(s"[WorkerService $workerId] Started on port ??? ")
-    }
-
-    /**
-     * gRPC 서버 종료 (사용 x)
-     */
-    def shutdown(): Unit = {
-        server.foreach { s =>
-            s.shutdown()
-            s.awaitTermination()
-        }
-        logger.info(s"[WorkerService $workerId] Shutdown")
-    }
-
-    /**
      * GetIntermediateFile RPC 구현 (작은 파일용)
      * proto: rpc GetIntermediateFile (IntermediateFileRequest) returns (IntermediateFileResponse)
      */
@@ -60,7 +37,7 @@ class WorkerServiceImpl(
         val fileId = FileId(request.i, request.j, request.k)
         val filePath = partitionDir.resolve(fileId.toFileName)
 
-        logger.info(s"[WorkerService $workerId] Serving file: ${fileId.toFileName}")
+        logger.debug(s"[WorkerService $workerId] Serving file: ${fileId.toFileName}")
 
         Future {
             Try {
@@ -78,7 +55,7 @@ class WorkerServiceImpl(
             } match {
                 case Success(response) => response
                 case Failure(ex) =>
-                    logger.info(s"[WorkerService $workerId] Error serving ${fileId.toFileName}: ${ex.getMessage}")
+                    logger.debug(s"[WorkerService $workerId] Error serving ${fileId.toFileName}: ${ex.getMessage}")
                     IntermediateFileResponse(
                         data = com.google.protobuf.ByteString.EMPTY,
                         success = false,
@@ -156,7 +133,7 @@ class WorkerServiceImpl(
             } match {
                 case Success(_) => // Already handled
                 case Failure(ex) =>
-                    logger.info(s"[WorkerService $workerId] Error streaming ${fileId.toFileName}: ${ex.getMessage}")
+                    logger.debug(s"[WorkerService $workerId] Error streaming ${fileId.toFileName}: ${ex.getMessage}")
                     val errorChunk = FileChunk(
                         data = com.google.protobuf.ByteString.EMPTY,
                         chunkIndex = 0,

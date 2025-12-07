@@ -64,15 +64,15 @@ trait MasterClient extends RecordCountCalculator with RecordExtractor with Sampl
             } catch {
                 case e: StatusRuntimeException if e.getStatus.getCode == Status.Code.UNAVAILABLE =>
                     if (onMasterShutdown.isDefined) {
-                        logger.info(s"[Worker] $operationName: Master unavailable (likely shutdown). Using fallback value.")
+                        logger.debug(s"[Worker] $operationName: Master unavailable (likely shutdown). Using fallback value.")
                         return onMasterShutdown.get
                     }
                     
-                    logger.info(s"[Worker] $operationName failed (Master unavailable). Retrying in 1s...")
+                    logger.debug(s"[Worker] $operationName failed (Master unavailable). Retrying in 1s...")
                     Thread.sleep(1000)
 
                 case NonFatal(e) =>
-                    logger.info(s"[Worker] $operationName failed. Retrying in 1s... Error: ${e.getMessage}")
+                    logger.debug(s"[Worker] $operationName failed. Retrying in 1s... Error: ${e.getMessage}")
                     Thread.sleep(1000)
             }
         }

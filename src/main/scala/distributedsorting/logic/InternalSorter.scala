@@ -147,8 +147,7 @@ trait InternalSorter extends LazyLogging {
    */
   def runSortAndPartition(): List[Path] = {
     val localExecutor = Executors.newFixedThreadPool(optimalThreadCount)
-    logger.info(s"[InternalSorter] optimalThreadcount: $optimalThreadCount, numCores: $numCores, memoryBasedThreadLimit: $memoryBasedThreadLimit, safeMemoryLimit: $safeMemoryLimit, maxFileSize: $maxFileSize")
-  
+    logger.info(s"[InternalSorter] sort&partition run, optimalThreadcount: $optimalThreadCount")
     implicit val localEc: ExecutionContext = ExecutionContext.fromExecutor(localExecutor)
 
     try {
@@ -182,7 +181,7 @@ trait InternalSorter extends LazyLogging {
 
     } finally {
       localExecutor.shutdown()
-      logger.info("[InternalSorter] Thread Pool Shutdown.")
+      logger.debug("[InternalSorter] Thread Pool Shutdown.")
     }
   }
 }

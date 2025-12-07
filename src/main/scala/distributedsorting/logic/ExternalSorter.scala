@@ -333,7 +333,7 @@ trait ExternalSorter extends LazyLogging {
             val sortedRuns = getInputFiles()
             
             if (sortedRuns.isEmpty) {
-                logger.info("정렬할 입력 파일이 없습니다.")
+                logger.debug("정렬할 입력 파일이 없습니다.")
                 return
             }
 
@@ -358,7 +358,7 @@ trait ExternalSorter extends LazyLogging {
             
         } catch {
             case e: Exception =>
-                logger.info(s"외부 정렬 중 오류 발생: ${e.getMessage}")
+                logger.debug(s"외부 정렬 중 오류 발생: ${e.getMessage}")
                 throw e // 오류 재전파
         } finally {
             // (5) 성공/실패 여부와 관계없이 임시 파일 정리
