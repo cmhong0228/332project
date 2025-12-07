@@ -23,7 +23,7 @@ Validate solution: [validate solution](https://morning-drawbridge-ada.notion.sit
 Instructions for **connecting the cluster**, **generating data**, and **validating solutions** are detailed in the [Documentation](#how-to-run).
 
 ### 1. Build Project
-First, build the project on the machine where you want to run the application.
+First, build the project on the each machine (Master node, each Worker Node) where you want to run the application.
 
 1. Clone the repository to your desired directory.
    ```bash
@@ -38,7 +38,8 @@ First, build the project on the machine where you want to run the application.
     sbt assembly
     ```
 ### 2. Run Master
->*Note: This step must be executed on the Master Node.*
+>*Note: This step must be executed on the Master Node.*  
+>*Note: Project must be [built](#1-build-project) on master node before this step.*
 
 Choose one of the following options to run the master.
 
@@ -63,7 +64,8 @@ Choose one of the following options to run the master.
     java -cp ./target/scala-2.13/distributedsorting.jar distributedsorting.master.Master 20
     ```
 ### 3. Run Worker
->*Note: This step must be executed on each Worker Node.*
+>*Note: This step must be executed on each Worker Node.*  
+>*Note: Project must be [built](#1-build-project) on each worker node before this step.*
 
 Choose one of the following options to run the worker.
 
